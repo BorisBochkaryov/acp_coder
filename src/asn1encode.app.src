@@ -1,0 +1,15 @@
+{application, asn1encode,
+ [
+  {description, ""},
+  {parse_transform, pt_chronica},
+  {vsn, "0.0.1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib,
+                  chronica,
+                  asn1
+                 ]},
+  {mod, { asn1encode_app, []}},
+  {env, []}
+ ]}.

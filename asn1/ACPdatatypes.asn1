@@ -1,0 +1,284 @@
+ACPdatatypes
+
+DEFINITIONS IMPLICIT TAGS ::=
+BEGIN
+
+-- CalledPartyNumber structure according Q.2763
+CalledPartyNumber ::= SEQUENCE {
+  nai        [0] NAIType OPTIONAL, -- DEFAULT subscriberNumber, Nature of address indicator
+  ni         [1] NIType OPTIONAL,
+  incomplete [2] BOOLEAN OPTIONAL, -- DEFAULT TRUE,  number incomplete indicator (false - complete, true - incomplete) - not by specs
+  inni       [3] INNIType OPTIONAL, -- DEFAULT routingToInternalNumberAllowed, Internal network number indicator
+  npi        [4] NPIType OPTIONAL, -- DEFAULT isdnTelephony,       Numbering plan indicator
+  digits     [5] PrintableString --OCTET STRING (SIZE (minACPCalledPartyNumberLength..maxACPCalledPartyNumberLength)) OPTIONAL % Number digits
+}
+
+RedirectionNumber ::= SEQUENCE {
+  nai        [0] NAIType OPTIONAL, -- DEFAULT subscriberNumber, Nature of address indicator
+  ni         [1] NIType OPTIONAL,
+  incomplete [2] BOOLEAN OPTIONAL, -- DEFAULT TRUE,  number incomplete indicator (false - complete, true - incomplete) - not by specs
+  inni       [3] INNIType OPTIONAL, -- DEFAULT routingToInternalNumberAllowed, Internal network number indicator
+  npi        [4] NPIType OPTIONAL, -- DEFAULT isdnTelephony,       Numbering plan indicator
+  digits     [5] OCTET STRING (SIZE (minACPCalledPartyNumberLength..maxACPCalledPartyNumberLength)) OPTIONAL -- Number digits
+}
+
+CallTransferNumber ::= SEQUENCE {
+  nai        [0] NAIType OPTIONAL, -- DEFAULT subscriberNumber, Nature of address indicator
+  ni         [1] NIType OPTIONAL,
+  incomplete [2] BOOLEAN OPTIONAL, -- DEFAULT TRUE,  number incomplete indicator (false - complete, true - incomplete) - not by specs
+  inni       [3] INNIType OPTIONAL, -- DEFAULT routingToInternalNumberAllowed, Internal network number indicator
+  npi        [4] NPIType OPTIONAL, -- DEFAULT isdnTelephony,       Numbering plan indicator
+  digits     [5] OCTET STRING (SIZE (minACPCalledPartyNumberLength..maxACPCalledPartyNumberLength)) OPTIONAL -- Number digits
+}
+
+-- CallingPartyNumber structure according Q.2763
+CallingPartyNumber ::= SEQUENCE {
+  nai        [0] NAIType, -- DEFAULT subscriberNumber, Nature of address indicator
+  ni         [1] NIType,
+  incomplete [2] BOOLEAN, -- DEFAULT TRUE, Calling party number incomplete indicator (false - complete, true - incomplete)
+  npi        [3] NPIType, -- DEFAULT isdnTelephony, Numbering plan indicator
+  apri       [4] ARPIType, -- DEFAULT presentationAllowed, Address presentation restricted indicator
+  screening  [5] ScreeningType, -- DEFAULT userProvidedVerifiedAndPassed, Screening indicator
+  digits     [6] PrintableString -- OCTET STRING (SIZE (minACPCallingPartyNumberLength..maxACPCallingPartyNumberLength))
+}
+
+CallingPartysCategory ::= ENUMERATED {
+  unknownAtThisTime(0),       -- Calling party's category unknow at this time (national use)
+  operatorFrench(1),          -- Operator, French language
+  operatorEngish(2),          -- Operator, English language
+  operatorGerman(3),          -- Operator, German language
+  operatorRussian(4),         -- Operator, Russian language
+  operatorSpanish(5),         -- Operator, Spanish language
+  reserved(9),                -- Reserved (see ITU-T Q.104) (national use) (may be used as natinal operator)
+  ordinarySubscriber(10),     -- Ordinary calling subscriber
+  subscriberWithPriority(11), -- Calling subsciber with priority
+  dataCall(12),               -- Data call (voice band data)
+  testCall(13),               -- Test call
+  spare(14),                  -- Spare
+  payphone(15),               -- Payphone
+  category0(224),             -- Reserved. Category of subscriber's terminal is 0.
+  hotelsSubscriber(225),      -- Hotel's subscriber. Category of subscribers termina'l is 2.
+  freeSubscriber(226),        -- Calls for subscriber are free. Category of subscriber's terminal is 5.
+  paidSubscriber(227),        -- Subscriber has access to paid services. Category of subscriber's terminal is 7.
+  localSubscriber(228),       -- Subscriber has access to local network only. Category of subscriber's terminal is 3.
+  localTaksofon(229),         -- Local taksofon. Category of subscriber's terminal is 9.
+  autoCallI(240),             -- Automatic call. Category I.
+  semiautoCallI(241),         -- Semi-automatic call. Category I.
+  autoCallII(242),            -- Automatic call. Category II.
+  semiautoCallII(243),        -- Semi-automatic call. Category II.
+  autoCallIII(244),           -- Automatic call. Category III.
+  semiautoCallIII(245),       -- Semi-automatic call. Category III.
+  autoCallIV(246),            -- Automatic call. Category IV.
+  semiautoCallIV(247)         -- Semi-automatic call. Category IV.
+}
+
+CalledPartysCategory ::= ENUMERATED {
+  unknownAtThisTime(0),       -- Calling party's category unknow at this time (national use)
+  operatorFrench(1),          -- Operator, French language
+  operatorEngish(2),          -- Operator, English language
+  operatorGerman(3),          -- Operator, German language
+  operatorRussian(4),         -- Operator, Russian language
+  operatorSpanish(5),         -- Operator, Spanish language
+  reserved(9),                -- Reserved (see ITU-T Q.104) (national use) (may be used as natinal operator)
+  ordinarySubscriber(10),     -- Ordinary calling subscriber
+  subscriberWithPriority(11), -- Calling subsciber with priority
+  dataCall(12),               -- Data call (voice band data)
+  testCall(13),               -- Test call
+  spare(14),                  -- Spare
+  payphone(15),               -- Payphone
+  category0(224),             -- Reserved. Category of subscriber's terminal is 0.
+  hotelsSubscriber(225),      -- Hotel's subscriber. Category of subscribers termina'l is 2.
+  freeSubscriber(226),        -- Calls for subscriber are free. Category of subscriber's terminal is 5.
+  paidSubscriber(227),        -- Subscriber has access to paid services. Category of subscriber's terminal is 7.
+  localSubscriber(228),       -- Subscriber has access to local network only. Category of subscriber's terminal is 3.
+  localTaksofon(229),         -- Local taksofon. Category of subscriber's terminal is 9.
+  autoCallI(240),             -- Automatic call. Category I.
+  semiautoCallI(241),         -- Semi-automatic call. Category I.
+  autoCallII(242),            -- Automatic call. Category II.
+  semiautoCallII(243),        -- Semi-automatic call. Category II.
+  autoCallIII(244),           -- Automatic call. Category III.
+  semiautoCallIII(245),       -- Semi-automatic call. Category III.
+  autoCallIV(246),            -- Automatic call. Category IV.
+  semiautoCallIV(247)         -- Semi-automatic call. Category IV.
+}
+
+-- OriginalCalledNumber structure according Q.2763
+OriginalCalledNumber ::= SEQUENCE {
+  nai        [0] NAIType, -- DEFAULT subscriberNumber, Nature of address indicator
+  ni         [1] NIType,
+  incomplete [2] BOOLEAN, -- DEFAULT TRUE, number incomplete indicator (false - complete, true - incomplete) - not by specs
+  npi        [3] NPIType, -- DEFAULT isdnTelephony, Numbering plan indicator
+  apri       [4] ARPIType, -- DEFAULT presentationAllowed, Address presentation restricted indicator
+  digits     [5] OCTET STRING (SIZE (minACPCalledPartyNumberLength..maxACPCalledPartyNumberLength)) -- Number digits
+}
+
+-- RedirectingNumber structure according Q.2763
+RedirectingNumber ::= SEQUENCE {
+  nai        [0] NAIType, -- DEFAULT subscriberNumber,  Nature of address indicator
+  ni         [1] NIType,
+  incomplete [2] BOOLEAN, -- DEFAULT TRUE,  number incomplete indicator (false - complete, true - incomplete) - not by specs
+  npi        [3] NPIType, -- DEFAULT isdnTelephony,  Numbering plan indicator
+  apri       [4] ARPIType, -- DEFAULT presentationAllowed,  Address presentation restricted indicator
+  digits     [5] OCTET STRING (SIZE (minACPCalledPartyNumberLength..maxACPCalledPartyNumberLength)) -- Number digits
+}
+
+-- Nature of address indicator
+NAIType ::= ENUMERATED {
+  spare(0),
+  subscriberNumber(1), -- national use
+  unknown(2),         -- national use
+  nationalNumber(3),  -- national use
+  internationNumber(4)
+}
+
+-- Internal network number indicator
+INNIType ::= ENUMERATED {
+  routingToInternalNumberAllowed(0),
+  routingToInternalNumberNotAllowed(1)
+}
+
+NIType ::= ENUMERATED {
+    private(0),
+    local(1),
+    zone(2),
+    intercity(3),
+    international(4),
+    emergency(5)
+}
+
+-- Numbering plan indicator
+NPIType ::= ENUMERATED {
+  spare(0),
+  isdnTelephony(1), -- E.164
+  reserved1(3),     -- reserved for national use
+  reserved2(4),     -- reserved for national use
+  reserved3(5)      -- reserved for national use
+}
+
+-- Address presentation restricted indicator
+ARPIType ::= ENUMERATED {
+  presentationAllowed(0),
+  presentationRestricted(1),
+  addressNotAvailable(2), -- national use, subfields NAI, incomplete, NP must be coded as 0's
+  spare(3)
+}
+
+-- Screening indicator
+ScreeningType ::= ENUMERATED {
+  userProvidedNotVerified(0),
+  userProvidedVerifiedAndPassed(1),
+  userProvidedVerifiedAndFailed(2),
+  networkProvided(3)
+}
+
+ACPDestinationRoutingAddress   ::=
+	SEQUENCE SIZE(1..numOfACPAddresses) OF CalledPartyNumber
+-- Indicates the list of Called Party Numbers (primary and alternates).
+
+-- RedirectionInformation structure according Q.2763
+ACPRedirectionInformation ::= SEQUENCE {
+  originalRedirectionReason [0] ACPOriginalRedirectionReason,
+  redirectingIndicator      [1] ACPRedirectingIndicator,
+  redirectingReason         [2] ACPRedirectingReason,
+  redirectionCounter        [3] INTEGER (1..5)
+}
+
+ACPOriginalRedirectionReason ::= ENUMERATED {
+  unknown(0),      -- Unknown/not available
+  busy(1),         -- User busy (national use)
+  noReply(2),      -- No reply (national use)
+  unconditional(3) -- Unconditional (national use)
+}
+
+ACPRedirectingIndicator ::= ENUMERATED {
+  noRedirection(0),          -- No redirection (national use)
+  reRouted(1),               -- Call re-routed (national use)
+  reRoutedAllRestricted(2),  -- Call re-routed, all redirection information presentation restricted (national use)
+  diversion(3),              -- Call diversion,
+  diversionAllRestricted(4), -- Call diversion, all redirection information presentation restricted
+  reRoutedRestricted(5),     -- Call re-routed, redirection information presentation restricted (national use)
+  diversionRestricted(6),    -- Call diversion, redirection information presentation restricted
+  spare(7)
+}
+
+ACPRedirectingReason ::= ENUMERATED {
+  unknown(0),       -- Unknown/not available
+  busy(1),          -- User busy
+  noReply(2),       -- No reply
+  unconditional(3), -- Unconditional
+  deflectAlert(4),  -- Deflection during alerting
+  deflectResp(5),   -- Deflection immediate response
+  noReachable(6)    -- Mobile subscriber not reachable
+}
+
+OptionalBackwardCallInidicators ::= SEQUENCE {
+  inbInfoInd            [0] InBandInfoIndicator DEFAULT noIndication,
+  callDiversionInd      [1] CallDiversionIndicator DEFAULT noIndication,
+  simpleSegmentationInf [2] SimpleSegmentationIndicator DEFAULT noAdditionalInformation,
+  mlppUserInd           [3] MLPPUserIndicator DEFAULT noIndication
+}
+
+InBandInfoIndicator ::= ENUMERATED {
+  noIndication(0),
+  inBandInfoOrPatternAvailable(1)
+}
+
+CallDiversionIndicator ::= ENUMERATED {
+  noIndication(0),
+  callDiversionMayOccur(1)
+}
+
+SimpleSegmentationIndicator ::= ENUMERATED {
+  noAdditionalInformation(0),
+  additionalInformationWillBeSent(1)
+}
+
+MLPPUserIndicator ::= ENUMERATED {
+  noIndication(0),
+  mlppUser(1)
+}
+
+GenericNotificationIndicatorList ::=
+        SEQUENCE SIZE(1..numOfGenericNotificatioIndicators) OF GenericNotificationIndicator
+
+GenericNotificationIndicator ::= ENUMERATED {
+  userSuspended(0),
+  userResumed(1),
+  bearerServiceChange(2),
+  callCompletionDelay(4),
+  conferenceEstablished(66),
+  conferenceDisconnected(67),
+  otherPartyAdded(68),
+  isolated(69),
+  reattached(70),
+  otherPartyIsolated(71),
+  otherPartyReattached(72),
+  otherPartySplit(73),
+  otherPartyDisconnected(74),
+  conferenceFloating(75),
+  callIsAWaitingCall(96),
+  callTransferAlerting(113),
+  callTransferActive(114),
+  remoteHold(121),
+  remoteRetrieval(122),
+  callIsDiverting(123)
+}
+
+TrunkGroupId ::= SEQUENCE {
+  trunkGroupId   [0]  OCTET STRING,
+  trunkId        [1]  OCTET STRING OPTIONAL,
+  pCMId          [2]  OCTET STRING OPTIONAL,
+  channelNumber  [3]  INTEGER OPTIONAL
+}
+
+minACPCalledPartyNumberLength	INTEGER ::= 0	-- example value
+maxACPCalledPartyNumberLength	INTEGER ::= 27
+
+minACPCallingPartyNumberLength	INTEGER ::= 0	-- example value
+maxACPCallingPartyNumberLength	INTEGER ::= 27
+
+numOfACPAddresses               INTEGER ::= 27
+
+numOfGenericNotificatioIndicators INTEGER ::= 10 -- example value
+
+END

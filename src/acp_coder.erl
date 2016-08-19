@@ -1,4 +1,4 @@
--module(asn1).
+-module(acp_coder).
 -author("borisbochkarev").
 -include("../include/ACP.hrl").
 -include("../include/ACPdatatypes.hrl").
@@ -7,18 +7,26 @@
 -include("../include/INCS3opsargs.hrl").
 -include_lib("chronica/include/chronica.hrl").
 
--export([encode/1, decode/1, test/1, writeToLogs/5]).
+-export([encode/1, decode/1, test/1]).
 
 % logs for encode/decode
-writeToLogs(TimeStart, TimeEnd, Packet, Result,Status) ->
-  Time = (TimeEnd - TimeStart) / 1000,
-  SizeBefore = length(lists:flatten(io_lib:format("~p",[Packet]))),
-  SizeAfter = size(Result),
+writeToLogs(TimeStart, TimeEnd, Packet, Result, Status) ->
+  Calc = fun(Start, End, Pack, Res, Stat) ->
+    Time = (End - Start) / 1000,
+    SizeBefore = length(lists:flatten(io_lib:format("~p",[Pack]))),
+    SizeAfter = size(Res),
+    case Stat of
+      encode ->
+        [Time, SizeBefore, SizeAfter, (1 - SizeAfter / SizeBefore) * 100];
+      decode ->
+        [Time, SizeBefore, SizeAfter]
+    end
+  end,
   case Status of
     encode ->
-      log:info([asn1encode],"Encode Time: ~p Size before/after: ~p/~p, Compress:~.2f%~n",[Time, SizeBefore, SizeAfter, (1 - SizeAfter / SizeBefore) * 100]);
+      log:info([asn1encode],"~nEncode Time: | Size before,after: | Compress:~n~p~n",[Calc(TimeStart,TimeEnd,Packet,Result,Status)]);
     decode ->
-      log:info([asn1encode],"Decode Time: ~p Size before/after: ~p/~p~n",[Time, SizeBefore, SizeAfter])
+      log:info([asn1encode],"~nDecode Time: | Size before,after:~n~p~n",[Calc(TimeStart,TimeEnd,Packet,Result,Status)])
   end.
 
 % encode packet
@@ -34,14 +42,12 @@ encode(Pack) ->
   case 'ACP':encode('AcpMessage',TempResult) of
     {ok, Binary} ->
       TimeEnd = os:system_time(),
-      Flag = integer_to_binary(1),
-      spawn(?MODULE,writeToLogs,[TimeStart,TimeEnd,Pack,Binary,encode]),
-      <<Flag/binary,Binary/binary>>;
+      writeToLogs(TimeStart,TimeEnd,Pack,Binary,encode),
+      <<"1",Binary/binary>>;
     Error ->
       {ok, Bin} = 'ACP':encode('ANYPACK',#'ANYPACK'{arg = term_to_binary(TempResult)}),
-      Flag = integer_to_binary(2),
       log:error([asn1error], "Error:~p~nPacket:~p~n",[Error,Pack]),
-      <<Flag/binary,Bin/binary>>
+      <<"2",Bin/binary>>
   end.
 
 
@@ -139,7 +145,7 @@ decode(Bytes) ->
       {ok, Pack} = 'ACP':decode('AcpMessage',BinPack),
       Result = afterDecode(Pack),
       TimeEnd = os:system_time(),
-      spawn(?MODULE,writeToLogs,[TimeStart,TimeEnd,Result,Bytes,decode]),
+      writeToLogs(TimeStart,TimeEnd,Result,Bytes,decode),
       Result;
     <<"2">> ->
       {ok, Pack} = 'ACP':decode('ANYPACK',BinPack),

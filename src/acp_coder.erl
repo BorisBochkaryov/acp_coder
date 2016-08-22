@@ -7,14 +7,14 @@
 -include("../include/INCS3opsargs.hrl").
 -include_lib("chronica/include/chronica.hrl").
 
--export([encode/1, decode/1, test/1]).
+-export([encode/1, decode/1, test/1, rechange/2]).
 
 % logs for encode/decode
-writeToLogs(TimeStart, TimeEnd, Packet, Result, Status) ->
+writeToLogs(TimeStart, Packet, Result, Status) ->
   Calc = fun(Start, End, Pack, Res, Stat) ->
     Time = (End - Start) / 1000,
-    SizeBefore = length(lists:flatten(io_lib:format("~p",[Pack]))),
-    SizeAfter = size(Res),
+    SizeBefore = erlang:length(lists:flatten(io_lib:format("~p",[Pack]))),
+    SizeAfter = erlang:size(Res),
     case Stat of
       encode ->
         [Time, SizeBefore, SizeAfter, (1 - SizeAfter / SizeBefore) * 100];
@@ -24,215 +24,178 @@ writeToLogs(TimeStart, TimeEnd, Packet, Result, Status) ->
   end,
   case Status of
     encode ->
-      log:info([asn1encode],"~nEncode Time: | Size before,after: | Compress:~n~p~n",[Calc(TimeStart,TimeEnd,Packet,Result,Status)]);
+      log:info([asn1encode],"~nEncode Time: | Size before,after: | Compress:~n~p~n",[Calc(TimeStart,os:system_time(),Packet,Result,Status)]);
     decode ->
-      log:info([asn1encode],"~nDecode Time: | Size before,after:~n~p~n",[Calc(TimeStart,TimeEnd,Packet,Result,Status)])
+      log:info([asn1encode],"~nDecode Time: | Size before,after:~n~p~n",[Calc(TimeStart,os:system_time(),Packet,Result,Status)])
   end.
 
 % encode packet
 encode(Pack) ->
   TimeStart = os:system_time(),
-  Packet = change(Pack),
-  % change packet type
+  Packet = list_to_tuple(change(Pack,1)),
+  % change packet type (for AcpBody)
   {TempTerm,TempPack} = Packet#'AcpMessage'.body,
-  [H | T] = atom_to_list(TempTerm),
-  Term = list_to_atom([H + 32 | T]),
+  [H | T] = erlang:atom_to_list(TempTerm),
+  Term = erlang:list_to_atom([H + 32 | T]),
   TempResult = Packet#'AcpMessage'{body = {Term, TempPack}},
   % encode
   case 'ACP':encode('AcpMessage',TempResult) of
-    {ok, Binary} ->
-      TimeEnd = os:system_time(),
-      writeToLogs(TimeStart,TimeEnd,Pack,Binary,encode),
-      <<"1",Binary/binary>>;
+    {_, Binary} ->
+      writeToLogs(TimeStart,Pack,Binary,encode),
+      <<49,Binary/binary>>;
     Error ->
-      {ok, Bin} = 'ACP':encode('ANYPACK',#'ANYPACK'{arg = term_to_binary(TempResult)}),
+      {_, Bin} = 'ACP':encode('ANYPACK',#'ANYPACK'{arg = term_to_binary(TempResult)}),
       log:error([asn1error], "Error:~p~nPacket:~p~n",[Error,Pack]),
-      <<"2",Bin/binary>>
+      <<50,Bin/binary>>
   end.
 
-
-change(Pack) -> changePack(change(Pack, 1, []),1,[]).
-% change packet for asn.1 formats (to list)
-change(Pack, N, Res) ->
-  Size = size(Pack),
+% bypassing the packet in one pass for encode
+change(Pack, N) ->
+  Size = erlang:size(Pack),
   if N =< Size ->
-    El = element(N,Pack),
-    if is_tuple(El) ->
-      if is_number(element(1,El)) , is_number(element(2,El)) , is_number(element(3,El)) -> % EventTime
-        change(Pack, N + 1, Res ++ [change(El, 1, ['EventTime'])]);
-      element(1, El) == sdp -> % TODO: сделать более простую сериализацию для SDPType
-        change(Pack, N + 1, Res ++ term_to_binary(El));
-      element(1, El) == refer -> % list with refer
-        [Term] = element(2,El),
-        Temp = list_to_tuple(change(Term,1,[])),
-        Result = change(Pack, N + 1, Res ++ [{refer, [{element(1,Temp),list_to_tuple(element(2,Temp))}]}]),
-        Result;
-      true->
-        change(Pack, N + 1, Res ++ [change(El, 1, [])])
-      end;
-    is_list(El) -> % changes in list
-      change(Pack, N + 1, Res ++ [change(list_to_tuple(El), 1, [])]);
-    El == undefined -> % change "undefined" on "asn1_NOVALUE"
-      change(Pack, N + 1, Res ++ [asn1_NOVALUE]);
-    N /= 1 , is_atom(El) ->
-      List = atom_to_list(El),
-      [First | _] = List,
-      if First >= 65 , First =< 90 -> % text constant-atom (example: 'CHOLD')
-        Atom = list_to_atom(string:to_lower(List)),
-        change(Pack, N + 1, Res ++ [Atom]);
-      true ->
-        T = string:words(List, $@),
-        if T >= 2 ->
-          change(Pack, N + 1, Res ++ [List]);
+    El = erlang:element(N,Pack),
+    if erlang:is_atom(El) ; erlang:is_binary(El) ; erlang:is_number(El) ->
+      if El == undefined -> % change undefined on asn1_NOVALUE
+        [asn1_NOVALUE | change(Pack,N+1)];
+      erlang:is_atom(El) ->
+        List = erlang:atom_to_list(El),
+        [First | _] = List,
+        if First >= 65 , First =< 90 , N /= 1 -> % text constant-atom (example: 'CHOLD')
+          Atom = erlang:list_to_atom(string:to_lower(List)),
+          [Atom | change(Pack,N+1)];
         true ->
-          change(Pack, N + 1, Res ++ [El])
-        end
-      end;
-    is_atom(El) ->
-      T = string:words(atom_to_list(El), $_),
-      if T >= 2 -> % atoms with _ (example: call_id)
-        List = atom_to_list(El),
-        Position = string:chr(List,$_),
-        ResList = list_to_atom(lists:sublist(List,Position-1) ++ [$-] ++ lists:nthtail(Position,List)),
-        change(Pack, N + 1, Res ++ [ResList]);
+          T2 = string:words(List, $@),
+          T11 = string:words(List, $_),
+          if T2 >= 2 -> % text constant-atom with @ (example: sip1@ecss1)
+            [List | change(Pack,N+1)];
+          T11 >= 2 -> % text constant with _ (example: remote_number)
+            Position = string:chr(List,$_),
+            ResList = erlang:list_to_atom(lists:sublist(List,Position-1) ++ [$-] ++ lists:nthtail(Position,List)),
+            [ResList | change(Pack,N+1)];
+          true -> % other atoms
+            [El | change(Pack,N+1)]
+          end
+        end;
       true ->
-        change(Pack, N + 1, Res ++ [El])
+        [El | change(Pack,N+1)]
       end;
+    erlang:is_tuple(El) ->
+      if erlang:size(El) == 3 , erlang:is_number(erlang:element(1, El)) ,
+          erlang:is_number(erlang:element(2, El)) , erlang:is_number(erlang:element(3, El)) -> % 'EventTime'
+        [erlang:list_to_tuple(['EventTime'] ++ change(El,1)) | change(Pack, N+1)];
+
+      % TODO: исправить для SDPType
+      erlang:size(El) == 4 , erlang:element(1,El) == attribute ,
+          erlang:is_binary(erlang:element(2, El)) == false -> % attribute в SDPType TODO: исправить
+        {_,ToBin,_,_} = El,
+        Elem = setelement(2,El,binary:list_to_bin(erlang:atom_to_list(ToBin))),
+        [erlang:list_to_tuple(change(Elem,1)) | change(Pack, N+1)];
+      erlang:element(1,El) == sdp, erlang:element(8, El) == <<>> -> % connection [8] в SDPType TODO: исправить
+        Elem = setelement(8,El,undefined),
+        if erlang:element(9, El) == <<>> ->
+          ResElem = setelement(9,El,undefined);
+        true ->
+          ResElem = Elem
+        end,
+        [erlang:list_to_tuple(change(ResElem,1)) | change(Pack, N + 1)];
+      erlang:element(1,El) == media_description , element(4, El) == <<>> -> % connection [2] в SDPType - media-description TODO: исправить
+        Elem = setelement(4,El,undefined),
+        [erlang:list_to_tuple(change(Elem,1)) | change(Pack, N+1)];
+      erlang:element(1,El) == sdp, erlang:element(9, El) == <<>> -> % atr6 [9] в SDPType TODO: исправить
+        Elem = setelement(9,El,undefined),
+        [erlang:list_to_tuple(change(Elem,1)) | change(Pack, N+1)];
+
+        true ->
+        [erlang:list_to_tuple(change(El,1)) | change(Pack, N+1)]
+      end;
+    erlang:is_list(El) ->
+      [change(erlang:list_to_tuple(El),1) | change(Pack, N+1)];
     true ->
-      change(Pack, N + 1, Res ++ [El])
+      El
     end;
   true ->
-    Res
+      []
   end.
 
-% change packet for asn.1 formats (to tuple)
-changePack(Pack, N, Res) ->
-  Size = length(Pack),
+% bypassing the packet in one pass for decode
+rechange(Pack, N) ->
+  Size = erlang:size(Pack),
   if N =< Size ->
-    El = element(N,list_to_tuple(Pack)),
-    if N /= 1 ->
-      if is_list(El) ->
-        changePack(Pack, N + 1, Res ++ [changePack(El, 1, [])]);
-      true->
-        changePack(Pack, N + 1, Res ++ [El])
+    El = erlang:element(N,Pack),
+    if erlang:is_atom(El) ; erlang:is_binary(El) ; erlang:is_number(El) ->
+      if El == asn1_NOVALUE -> % change asn1_NOVALUE on undefined
+        [undefined | rechange(Pack,N+1)];
+      erlang:is_atom(El) ->
+        List = erlang:atom_to_list(El),
+        [First | _] = List,
+        if First >= 65 , First =< 90 , N /= 1 -> % text constant-atom (example: 'CHOLD')
+          Atom = erlang:list_to_atom(string:to_lower(List)),
+          [Atom | rechange(Pack,N+1)];
+        true ->
+          T11 = string:words(List, $-),
+          if T11 >= 2 -> % text constant with - (example: 'remote-number')
+            Position = string:chr(List,$-),
+            ResList = erlang:list_to_atom(lists:sublist(List,Position-1) ++ [$_] ++ lists:nthtail(Position,List)),
+            [ResList | rechange(Pack,N+1)];
+          true -> % other atoms
+            Atoms = [way, acb, cfb, cfsip, cfnr, cfu, cgg, chold, chunt, cidb, ctr, dnd, mgm, pickup],
+            Search = [Res || Res <- Atoms, Res == El],
+            if Search /= [] ->
+              Atom = erlang:list_to_atom(string:to_upper(erlang:atom_to_list(El))),
+              [Atom | rechange(Pack,N+1)];
+            true ->
+              [El | rechange(Pack,N+1)]
+            end
+          end
+        end;
+      true ->
+        [El | rechange(Pack,N+1)]
       end;
-    is_list(El) ->
-      Res ++ [changePack(El, 1, [])] ++ changePack(Pack, N + 1, []);
-    is_number(El) ->
-      tuple_to_list({El}) ++ changePack(Pack, N + 1, Res);
+    erlang:is_tuple(El) ->
+      if erlang:size(El) == 4 , erlang:element(1, El) == 'EventTime' -> % 'EventTime'
+        [erlang:list_to_tuple(rechange(El,2)) | rechange(Pack, N+1)];
+      true ->
+        [erlang:list_to_tuple(rechange(El,1)) | rechange(Pack, N+1)]
+      end;
+    erlang:is_list(El) ->
+      T11 = string:words(El, $@),
+      if T11 >= 2 ->
+        [list_to_atom(El) | rechange(Pack, N+1)];
+      true ->
+        [rechange(erlang:list_to_tuple(El),1) | rechange(Pack, N+1)]
+      end;
     true ->
-      list_to_tuple([El] ++ changePack(Pack, N + 1, Res))
+      El
     end;
   true ->
-    Res
+    []
   end.
 
 % after decode process (change AcpMessage.body type)
 afterDecode(Pack) ->
-  TPack = rechange(Pack),
+  %TPack = rechange(Pack),
+  TPack = list_to_tuple(rechange(Pack,1)),
   {TempTerm, TempP} = TPack#'AcpMessage'.body,
-  [H1 | T1] = atom_to_list(TempTerm),
-  Term = list_to_atom([H1 - 32 | T1]),
+  [H1 | T1] = erlang:atom_to_list(TempTerm),
+  Term = erlang:list_to_atom([H1 - 32 | T1]),
   TPack#'AcpMessage'{body = {Term, TempP}}.
 
 % decode packet
-decode(Bytes) ->
+decode(<<49,BinPack/binary>>) ->
   TimeStart = os:system_time(),
-  Flag = binary:part(Bytes, {0,1}),
-  BinPack = binary:part(Bytes, {1,byte_size(Bytes)-1}),
-  case Flag of
-    <<"1">> ->
-      {ok, Pack} = 'ACP':decode('AcpMessage',BinPack),
-      Result = afterDecode(Pack),
-      TimeEnd = os:system_time(),
-      writeToLogs(TimeStart,TimeEnd,Result,Bytes,decode),
-      Result;
-    <<"2">> ->
-      {ok, Pack} = 'ACP':decode('ANYPACK',BinPack),
-      TempPack = binary_to_term(Pack#'ANYPACK'.arg),
-      afterDecode(TempPack);
-    _ ->
-      error
-  end.
-
-rechange(Pack) -> rechangePack(rechange(Pack, 1, []),1,[]).
-% analogue change
-rechange(Pack, N, Res) ->
-  Size = length(tuple_to_list(Pack)),
-  if N =< Size ->
-    El = element(N,Pack),
-    if is_tuple(El) ->
-      case element(1,El) of
-        'EventTime' ->
-          rechange(Pack, N + 1, Res ++ [list_to_tuple(change(El, 2, []))]);
-        'SDPType' ->
-          {'SDPType', Type, Binary} = El,
-          rechange(Pack, N + 1, Res ++ [{'SDPType', Type, [binary_to_term(Binary)]}]);
-        refer ->
-          [Term] = element(2,El),
-          {_, Value} = element(2,Term),
-          rechange(Pack, N + 1, Res ++ [{refer, [{'CHUNT', {chunt_refer, Value}}]}]);
-        _ ->
-          rechange(Pack, N + 1, Res ++ [rechange(El, 1, [])])
-      end;
-    is_list(El) -> % changes in list
-      T = string:words(El, $@),
-      if T >= 2 ->
-        Res ++ [list_to_atom(El)];
-      true ->
-        rechange(Pack, N + 1, Res ++ [rechange(list_to_tuple(El), 1, [])])
-      end;
-    El == asn1_NOVALUE ->
-      rechange(Pack, N + 1, Res ++ [undefined]);
-    is_atom(El) ->
-      Atom = atom_to_list(El),
-      T = string:words(Atom, $-),
-      if T >= 2 -> % atoms with _ (example: call_id)
-        Position = string:chr(Atom,$-),
-        ResList = list_to_atom(lists:sublist(Atom,Position-1) ++ [$_] ++ lists:nthtail(Position,Atom)),
-        rechange(Pack, N + 1, Res ++ [ResList]);
-      true ->
-        List = [way, acb, cfb, cfsip, cfnr, cfu, cgg, chold, chunt, cidb, ctr, dnd, mgm, pickup, hole],
-        Search = [Res || Res <- List, Res == El],
-        if Search /= [] ->
-          Atom = list_to_atom(string:to_upper(atom_to_list(El))),
-          rechange(Pack, N + 1, Res ++ [Atom]);
-        true ->
-          rechange(Pack, N + 1, Res ++ [El])
-        end
-      end;
-    true ->
-      rechange(Pack, N + 1, Res ++ [El])
-    end;
-  true ->
-    Res
-  end.
-
-rechangePack(Pack, N, Res) ->
-  Size = length(Pack),
-  if N =< Size ->
-    El = element(N,list_to_tuple(Pack)),
-    if N /= 1 ->
-      if is_list(El) ->
-        rechangePack(Pack, N + 1, Res ++ [rechangePack(El, 1, [])]);
-      true->
-        rechangePack(Pack, N + 1, Res ++ [El])
-      end;
-    is_list(El) ->
-        Res ++ [rechangePack(El, 1, [])] ++ rechangePack(Pack, N + 1, []);
-    is_number(El) ->
-      tuple_to_list({El}) ++ rechangePack(Pack, N + 1, Res);
-    true ->
-      list_to_tuple([El] ++ rechangePack(Pack, N + 1, Res))
-    end;
-    true ->
-      Res
-  end.
+  {_, Pack} = 'ACP':decode('AcpMessage',BinPack),
+  Result = afterDecode(Pack),
+  writeToLogs(TimeStart,Result,BinPack,decode),
+  Result;
+decode(<<50,BinPack/binary>>) ->
+  {_, Pack} = 'ACP':decode('ANYPACK',BinPack),
+  TempPack = erlang:binary_to_term(Pack#'ANYPACK'.arg),
+  afterDecode(TempPack).
 
 % method with list for testing asn1encode
 test([Pack | T]) ->
-  Bytes = asn1:encode(Pack),
-  Result = asn1:decode(Bytes),
+  Bytes = encode(Pack),
+  Result = decode(Bytes),
   if Result == Pack ->
     io:format("OK~n");
   true ->

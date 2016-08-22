@@ -168,13 +168,87 @@ SetupCRType ::= SEQUENCE {
   eventTime             [7] EventTime
 }
 
+--SDPType ::= SEQUENCE {
+--  type      [0] ENUMERATED {
+--    offer(0),
+--    answer(1),
+--    unknown(2)
+--  },
+--  body      [1] BIT STRING
+--}
+
 SDPType ::= SEQUENCE {
-  type      [0] ENUMERATED {
+  type              [0] ENUMERATED {
     offer(0),
     answer(1),
     unknown(2)
-  },
-  body      [1] BIT STRING
+  } OPTIONAL,
+  sdp              [1] SEQUENCE OF SEQUENCE {
+    version             [1] OCTET STRING OPTIONAL,
+    origin              [2] SEQUENCE {
+        prefix   [1] OCTET STRING,
+        first    [2] OCTET STRING,
+        second   [3] OCTET STRING,
+        to       [4] OCTET STRING,
+        proto    [5] OCTET STRING,
+        ip       [6] OCTET STRING
+    } OPTIONAL,
+    atr1                [3] OCTET STRING OPTIONAL,
+    atr2                [4] OCTET STRING OPTIONAL,
+    atr3                [5] OCTET STRING OPTIONAL,
+    atr4                [6] OCTET STRING OPTIONAL,
+    atr5                [7] OCTET STRING OPTIONAL,
+    connection          [8] SEQUENCE { -- TODO: вместо undefined подставляется <<>>
+        to      [1] OCTET STRING,
+        proto   [2] OCTET STRING,
+        ip      [3] OCTET STRING
+    } OPTIONAL,
+    atr6                [9] SEQUENCE OF OCTET STRING OPTIONAL,
+    atr7                [10] OCTET STRING OPTIONAL,
+    atr8                [11] SEQUENCE OF OCTET STRING OPTIONAL,
+    atr9                [12] OCTET STRING OPTIONAL,
+    atr10               [13] OCTET STRING OPTIONAL,
+    attribute           [14] SEQUENCE OF SEQUENCE {
+        atr1            [0] OCTET STRING OPTIONAL,
+        atr2            [1] OCTET STRING OPTIONAL,
+        types           [2] ENUMERATED {
+            session(0)
+        } OPTIONAL
+    } OPTIONAL,
+    media-description   [15] SEQUENCE OF SEQUENCE {
+        media       [0] SEQUENCE {
+            arg1        [0] OCTET STRING OPTIONAL,
+            arg2        [1] OCTET STRING OPTIONAL,
+            arg3        [2] OCTET STRING OPTIONAL,
+            arg4        [3] OCTET STRING OPTIONAL,
+            format      [4] SEQUENCE OF SEQUENCE {
+                arg1        [0] OCTET STRING OPTIONAL,
+                arg2        [1] OCTET STRING OPTIONAL,
+                arg3        [2] OCTET STRING OPTIONAL,
+                arg4        [3] OCTET STRING OPTIONAL,
+                arg5        [4] OCTET STRING OPTIONAL,
+                arg6        [5] BOOLEAN OPTIONAL,
+                arg7        [6] BOOLEAN OPTIONAL
+            } OPTIONAL
+        },
+        arg1        [1] OCTET STRING OPTIONAL,
+        connection  [2] SEQUENCE { -- TODO: <<>> вместо undefined
+            to          [0] OCTET STRING OPTIONAL,
+            prot        [1] OCTET STRING OPTIONAL,
+            ip          [2] OCTET STRING OPTIONAL
+        } OPTIONAL,
+        arg2        [3] SEQUENCE OF OCTET STRING OPTIONAL,
+        arg3        [4] OCTET STRING OPTIONAL,
+        attribute   [5] SEQUENCE OF SEQUENCE {
+            arg1        [0] OCTET STRING OPTIONAL, -- сделать обязательный перевод в строку
+            arg2        [1] OCTET STRING OPTIONAL,
+            arg3        [2] ENUMERATED {
+                session(0),
+                media(1)
+            } OPTIONAL
+        } OPTIONAL
+    }
+  } OPTIONAL
 }
 
 ReferType ::= SEQUENCE {
@@ -228,7 +302,7 @@ SetupIRType ::= SEQUENCE {
     refer           [0] SEQUENCE OF CHUNT
   } OPTIONAL,
   mode                       [24] SetupModeType          OPTIONAL,
-  eventTime                  [25] EventTime              OPTIONAL
+  eventTime                  [25] EventTime OPTIONAL
 }
 
 CHUNT ::= SEQUENCE {
@@ -408,8 +482,7 @@ PICArg ::= SEQUENCE {
   cause                      [18] Cause                   OPTIONAL
 }
 
--- In our code I expect that EventTime will contain result of erlang:now() - {MeSec, Sec, MiSec}
---EventTime ::= OCTET STRING.
+-- contain result of erlang:now() - {MeSec, Sec, MiSec}
 EventTime ::= SEQUENCE {
     megaSec     [0] INTEGER,
     sec         [1] INTEGER,

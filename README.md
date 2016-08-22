@@ -5,7 +5,7 @@ asn1encode - сериализатор для ACP пакетов.
 Далее для настройки проекта необходимо в папке с asn1encode выполнить следующий bash скрипт:
 
 ```bash
-rebar get-deps && rebar compile && ./relx release
+rebar get-deps && rebar compile && relx release
 ```
 или запустить [compile.sh](https://github.com/borisbochkaryov/asn1encode/complite.sh) из папки с asn1encode.
 
@@ -28,10 +28,10 @@ rebar get-deps && rebar compile && ./relx release
 ##Использование
 Сериализация:
 ```erlang
-Binary = asn1:encode(Pack).
+Binary = acp_coder:encode(Pack).
 ```
 
 Десериализация:
 ```erlang
-Result = asn1:decode(Binary).
+Result = acp_coder:decode(Binary).
 ```

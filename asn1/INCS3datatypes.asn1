@@ -372,39 +372,35 @@ MediaId ::= SEQUENCE {
 }
 
 AdditionalInformation	::= CHOICE {
-    forISUP		      [0] AdditionalISUP,
+    forISUP	          [0] AdditionalISUP,
     forMegaco         [1] AdditionalMegaco,
-	forOther	      [2] INTEGER(0..100),
-	causeDescription  [3] AdditionalCauseDescription,--AdditionalCallingInfo,
-	ssNotification    [4] SSNotification,
-	sipInfo           [5] SEQUENCE OF CHOICE {
+    forOther	      [2] INTEGER(0..100),
+    causeDescription  [3] AdditionalCauseDescription,
+    ssNotification    [4] SSNotification,
+    sipInfo           [5] SEQUENCE OF CHOICE {
 	    call-id          [0] PrintableString,
 	    node             [1] PrintableString,
 	    remote-number    [2] PrintableString,
 	    tag-from         [3] PrintableString,
 	    tag-to           [4] PrintableString
-	},
-	callingInfo       [6] SEQUENCE OF CHOICE {
+    },
+    callingInfo       [6] SEQUENCE OF CHOICE {
 	    displayName     [0] PrintableString,
 	    original-address [1] PrintableString
-	},
-	rm-ai              [7] SEQUENCE OF CHOICE {
+    },
+    rm-ai             [7] SEQUENCE OF CHOICE {
         ivr-script       [0] PrintableString
     },
-    wi-id                [8] OCTET STRING,
-    media-id             [9] MediaId,
-    cfc-enabled          [10] BOOLEAN,
-    cggCall              [11] BOOLEAN
+    wi-id             [8] OCTET STRING,
+    media-id          [9] MediaId,
+    cfc-enabled       [10] BOOLEAN,
+    cggCall           [11] BOOLEAN
 }
--- Additional information
--- The unspecified info that is depends on context.
-
 
 AdditionalISUP ::= SEQUENCE {
 	message       [0] IA5String (SIZE (minMessageContentLength..maxMessageContentLength)),
 	params	  	  [1] SET OF AdditionalISUPParam OPTIONAL
 }
--- Additional info for ISUP (e.g. optional params for IAM)
 
 
 AdditionalISUPParam ::= SEQUENCE {

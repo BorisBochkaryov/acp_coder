@@ -1,0 +1,506 @@
+syntax = "proto3";
+import "google/protobuf/any.proto";
+
+package eltex;
+
+message AcpMessage {
+  optional bytes uri = 1 [default = undefined];
+  optional uint64 callRef = 2 [default = 0];
+  optional bytes body = 3 [default = undefined];
+}
+message ReferType {
+  optional bytes exchange = 1 [default = undefined];
+  optional bytes routingKey = 2 [default = undefined];
+  optional SID sid = 3 [default = undefined];
+  optional CallReference callRef = 4 [default = undefined];
+  optional bytes conf_id = 5 [default = undefined];
+}
+message CallReference {
+  optional int32 arg = 1 [default = 0];
+}
+message SID {
+  optional bytes arg = 1 [default = undefined];
+}
+message TrunkGroupId {
+  repeated bytes trunkGroupId = 1 [default = undefined];
+  optional bytes trunkId = 2 [default = undefined];
+  optional bytes pCMId = 3 [default = undefined];
+  optional int32 channelNumber = 4 [default = 0];
+}
+message EventTime {
+  optional int32 MegaSec = 1 [default = 0];
+  optional int32 Sec = 2 [default = 0];
+  optional int32 MicSec = 3 [default = 0];
+}
+enum Cause {
+  normal = 1;
+  originationDenied = 2;
+  collectDigits = 3;
+  authorisationFailure = 4;
+  bPtyAlerted = 5;
+  noIndication = 6;
+  aPtyAbandon = 7;
+  invalidCollectedInformation = 8;
+  collectInformationFailure = 9;
+  aPtyDisc = 10;
+  bPtyDisc = 11;
+  routeSelectFailure = 12;
+  oNoAnswer = 13;
+  terminationDenied = 14;
+  notReachable = 15;
+  bPtyNoAnswer = 16;
+  bPtyBusyUDUB = 17;
+  bPtyBusyNDUB = 18;
+  ss7Failure = 19;
+  calledPartyRejected = 20;
+  tException = 21;
+  routeFailure1 = 22;
+  routeFailure2 = 23;
+  ssActivating = 24;
+  conversationTimeout = 25;
+  noCircuitAvailable = 26;
+  coreNotification = 27;
+  unsupportedMedia = 28;
+  numberIncomplete = 29;
+  invalidNumber = 30;
+  unassignedNumber = 31;
+  doNotDisturb = 32;
+  externalControlled = 33;
+  systemFailure = 34;
+  applicationNotification = 35;
+  refer_ok = 36;
+  refer_failure = 37;
+  hole = 38;
+  hold = 39;
+}
+enum CauseInitiator {
+  user = 1;
+  isup_network = 2;
+  non_isup_network = 3;
+  system = 4;
+}
+message ReleaseType{
+  optional Cause cause = 1 [default = normal];
+  optional CauseInitiator causeInitiator = 2 [default = system];
+  optional string dialledDigits = 3 [default = undefined];
+  optional bytes causeIsup = 4 [default = undefined];
+  repeated bytes additionalInfo = 5 [default = undefined];
+  optional TrunkGroupId trunkGroupId = 6 [default = undefined];
+  optional SID sid = 7 [default = undefined];
+  optional ReferType refer = 8 [default = undefined];
+  optional bool need_ack = 9 [default = true];
+  optional EventTime eventTime = 10 [default = undefined];
+}
+message ReleaseReq {
+  optional ReleaseType arg = 1 [default = undefined];
+}
+message AdditionalInformation {
+  optional SSNotification ssNotification = 1 [default = undefined];
+  optional AdditionalCauseDescription causeDescription = 2 [default = undefined];
+}
+message AdditionalCauseDescription {
+  optional string value = 1 [default = undefined];
+  optional string text = 2 [default = undefined];
+}
+message CallProgressReq {
+  optional CallProgressType arg = 1;
+}
+message CallProgressType {
+  optional Cause cause = 1;
+  optional CauseInitiator causeInitiator = 2 [default = system];
+  optional bytes causeIsup = 3 [default = undefined];
+  optional EventInformation eventInformation = 4 [default = undefined];
+  optional bytes additionalInfo = 5 [default = undefined];
+  optional OptionalBackwardCallIndicators oBCI = 6 [default = undefined];
+  repeated GenericNotificationIndicator gNotification = 7 [default = undefined];
+  optional RedirectionNumber redirectionNumber = 8 [default = undefined];
+  optional RedirectionRestrictionIndicator redirectionRestInd = 9 [default = undefined];
+  optional CallDiversionInformation callDiversionInfo = 10 [default = undefined];
+  repeated uint64 facility = 11 [default = undefined];
+  optional SDPType sdp = 12 [default = undefined];
+  optional MediaPointType mediaPoint = 13 [default = undefined];
+  optional TrunkGroupId trunkGroupId = 14 [default = undefined];
+  optional CallTransferNumber callTransferNumber = 15 [default = undefined];
+  optional ReferType refer = 16 [default = undefined];
+  optional EventTime eventTime = 17;
+}
+enum EventIndicator {
+  alerting = 1;
+  progress = 2;
+  in_band_info = 3;
+  cfb = 4;
+  cfnr = 5;
+  cfu = 6;
+}
+enum EventPresentationRestrictedIndicator {
+  no_indication = 1;
+  restricted = 2;
+}
+message EventInformation {
+  optional EventIndicator eventIndicator = 1;
+  optional EventPresentationRestrictedIndicator eventPresentationIndicator = 2;
+}
+enum InBandInfoIndicator {
+   noIndication = 0;
+   inBandInfoOrPatternAvailable = 1;
+}
+enum CallDiversionIndicator {
+  noIndication = 0;
+  callDiversionMayOccur = 1;
+}
+enum SimpleSegmentationIndicator {
+  noAdditionalInformation = 0;
+  additionalInformationWillBeSent = 1;
+}
+enum MLPPUserIndicator {
+  noIndication = 0;
+  mlppUser = 1;
+}
+message OptionalBackwardCallIndicators {
+  optional InBandInfoIndicator inbInfoInd = 1 [default = noIndication];
+  optional CallDiversionIndicator callDiversionInd = 2 [default = noIndication];
+  optional SimpleSegmentationIndicator simpleSegmentationInf = 3 [default = noAdditionalInformation];
+  optional MLPPUserIndicator mlppUserInd = 4 [default = noIndication];
+}
+enum GenericNotificationIndicator {
+  userSuspended = 0;
+  userResumed = 1;
+  bearerServiceChange = 2;
+  callCompletionDelay = 4;
+  conferenceEstablished = 66;
+  conferenceDisconnected = 67;
+  otherPartyAdded = 68;
+  isolated = 69;
+  reattached = 70;
+  otherPartyIsolated = 71;
+  otherPartyReattached = 72;
+  otherPartySplit = 73;
+  otherPartyDisconnected = 74;
+  conferenceFloating = 75;
+  callIsAWaitingCall = 96;
+  callTransferAlerting = 113;
+  callTransferActive = 114;
+  remoteHold = 121;
+  remoteRetrieval = 122;
+  callIsDiverting = 123;
+  localHold = 124;
+  localRetrieval = 125;
+  release = 126;
+  sessionPing = 127;
+  sessionPong = 128;
+  mediaChanged = 129;
+  mediaConnected = 130;
+  pickupActivating = 131;
+}
+message RedirectionNumber {
+  optional NAIType nai = 1;
+  optional NIType ni = 2;
+  optional bool incomplete = 3;
+  optional INNIType inni = 4;
+  optional NPIType npi = 5;
+  repeated uint64 digits = 6;
+}
+enum NAIType {
+  spare = 0;
+  subscriberNumber = 1;
+  unknown = 2;
+  nationalNumber = 3;
+  internationNumber = 4;
+}
+enum NIType {
+  private = 0;
+  local = 1;
+  zone = 2;
+  intercity = 3;
+  international = 4;
+  emergency = 5;
+}
+enum NPIType {
+  spare = 0;
+  isdnTelephony = 1;
+  dataNumberingPlan = 2;
+  telexNumberingPlan = 3;
+  reserved1 = 4;
+  reserved2 = 5;
+  reserved3 = 6;
+}
+enum INNIType {
+  routingToInternalNumberAllowed = 0;
+  routingToInternalNumberNotAllowed = 1;
+}
+enum RedirectionRestrictionIndicator {
+  presentation_allowed = 0;
+  presentation_restricted = 1;
+}
+enum NotificationSubscriptionOptions {
+  unknown = 0;
+  presentation_not_allowed = 1;
+  presentation_allowed_with_redirecting_number = 2;
+  presentation_allowed_without_redirecting_number = 3;
+}
+enum RedirectingReason {
+  unknown = 0;
+  busy = 1;
+  noReply = 2;
+  unconditional = 3;
+  deflectAlert = 4;
+  deflectResp = 5;
+  notReachable = 6;
+  timeOfDay = 7;
+  doNotDisturb = 8;
+  followMe = 9;
+  outOfService = 10;
+  away = 11;
+}
+message CallDiversionInformation {
+  optional NotificationSubscriptionOptions notificationSubsOpts = 1;
+  optional RedirectingReason redirectingReason = 2;
+}
+message SDPType {
+  enum Type {
+    offer = 1;
+    answer = 2;
+    unknown = 3;
+  }
+  optional Type type = 1 [default = unknown];
+  repeated bytes body = 2;
+}
+message MediaPointType {
+  optional bytes arg = 1;
+}
+enum APRIType {
+  presentationAllowed = 0;
+  presentationRestricted = 1;
+  addressNotAvailable = 2;
+  spare = 3;
+}
+enum ScreeningType {
+  userProvidedNotVerified = 0;
+  userProvidedVerifiedAndPassed = 1;
+  userProvidedVerifiedAndFailed = 2;
+  networkProvided = 3;
+}
+message CallTransferNumber {
+  optional NAIType nai = 1;
+  optional NIType ni = 2;
+  optional bool incomplete = 3;
+  optional NPIType npi = 4;
+  optional APRIType apri = 5;
+  optional ScreeningType screening = 6;
+  repeated uint64 digits = 7;
+}
+enum SSFamily {
+  ACB = 1;
+  CFB = 2;
+  CFSip = 3;
+  CFNR = 4;
+  CFU = 5;
+  CGG = 6;
+  CHOLD = 7;
+  CHUNT = 8;
+  CIDB = 9;
+  CTR = 10;
+  DND = 11;
+  MGM = 12;
+  PICKUP = 13;
+}
+message SSNotification {
+  optional SSFamily family = 1 [default = undefined];
+  optional CallingPartyNumber cgpn = 2 [default = undefined];
+  optional CalledPartyNumber cdpn = 3 [default = undefined];
+  enum ServingSide {
+    calling = 1;
+    called = 2;
+  }
+  optional ServingSide servingSide = 4 [default = undefined];
+  optional EventTime serviceTimeStamp = 5 [default = undefined];
+  repeated Participants participants = 6 [default = undefined];
+  optional bool internal = 7 [default = false];
+  repeated string arg = 8 [default = undefined];
+}
+message CallingPartyNumber {
+  optional NAIType nai = 1 [default = subscriberNumber];
+  optional NIType ni = 2 [default = private];
+  optional bool incomplete = 3 [default = false];
+  optional NPIType npi = 4 [default = isdnTelephony];
+  optional APRIType apri = 5 [default = presentationAllowed];
+  optional ScreeningType screening = 6 [default = networkProvided];
+  optional string digits = 7;
+}
+message CalledPartyNumber {
+  optional NAIType nai = 1 [default = undefined];
+  optional NIType ni  = 2 [default = undefined];
+  optional bool incomplete = 3 [default = undefined];
+  optional INNIType inni = 4 [default = undefined];
+  optional NPIType npi = 5 [default = undefined];
+  repeated uint64 digits = 6;
+}
+message Participants {
+  optional CalledPartyNumber arg = 1;
+  optional CallingPartyNumber arg1 = 2;
+}
+message SetupResp {
+  optional SetupCRType arg = 0;
+}
+message SetupCRType {
+  optional CallingPartyNumber connectedNumber = 1 [default = undefined];
+  repeated bytes additionalInfo = 2 [default = undefined];
+  optional RedirectionNumber redirectionNumber = 3 [default = undefined];
+  optional RedirectionRestrictionIndicator redirectionRestInd = 4 [default = undefined];
+  optional SDPType sdp = 5;
+  optional MediaPointType mediaPoint = 6 [default = undefined];
+  optional ReferType refer = 7 [default = undefined];
+  optional EventTime eventTime = 8;
+}
+message SipInfo {
+  repeated string arg = 0;
+}
+message SetupConf {
+   optional SetupCRType arg = 0;
+}
+message CallProgressInd {
+  optional CallProgressType arg = 0;
+}
+message SetupInd {
+  optional SetupIRType arg = 0;
+}
+enum CalledPartysCategory {
+  unknownAtThisTime = 0;
+  operatorFrench = 1;
+  operatorEngish = 2;
+  operatorGerman = 3;
+  operatorRussian = 4;
+  operatorSpanish = 5;
+  reserved = 9;
+  ordinarySubscriber = 10;
+  subscriberWithPriority = 11;
+  dataCall = 12;
+  testCall = 13;
+  spare = 14;
+  payphone = 15;
+  category0 = 224;
+  hotelsSubscriber = 225;
+  freeSubscriber = 226;
+  paidSubscriber = 227;
+  localSubscriber = 228;
+  localTaksofon = 229;
+  autoCallI = 240;
+  semiautoCallI = 241;
+  autoCallII = 242;
+  semiautoCallII = 243;
+  autoCallIII = 244;
+  semiautoCallIII = 245;
+  autoCallIV = 246;
+  semiautoCallIV = 247;
+}
+enum CallingPartysCategory {
+  unknownAtThisTime = 0;
+  operatorFrench = 1;
+  operatorEngish = 2;
+  operatorGerman = 3;
+  operatorRussian = 4;
+  operatorSpanish = 5;
+  reserved = 9;
+  ordinarySubscriber = 10;
+  subscriberWithPriority = 11;
+  dataCall = 12;
+  testCall = 13;
+  spare = 14;
+  payphone = 15;
+  category0 = 224;
+  hotelsSubscriber = 225;
+  freeSubscriber = 226;
+  paidSubscriber = 227;
+  localSubscriber = 228;
+  localTaksofon = 229;
+  autoCallI = 240;
+  semiautoCallI = 241;
+  autoCallII = 242;
+  semiautoCallII = 243;
+  autoCallIII = 244;
+  semiautoCallIII = 245;
+  autoCallIV = 246;
+  semiautoCallIV = 247;
+}
+message OriginalCalledNumber {
+   optional NAIType nai = 0;
+   optional NIType ni = 1;
+   optional bool incomplete = 2;
+   optional NPIType npi = 3;
+   optional APRIType apri = 4;
+   repeated uint64 digits = 5;
+}
+message GenericNumbers {
+   repeated bytes arg = 0;
+}
+message RedirectingNumber {
+  optional NAIType nai = 0;
+  optional NIType ni = 1;
+  optional bool incomplete = 2;
+  optional NPIType npi = 3;
+  optional APRIType apri = 4;
+  repeated uint64 digits = 5;
+}
+message RedirectionInformation {
+  optional OriginalRedirectionReason originalRedirectionReason = 1;
+  optional RedirectingIndicator redirectingIndicator = 2 [default = diversion];
+  optional RedirectingReason redirectingReason = 3;
+  optional int32 redirectionCounter = 4;
+}
+enum OriginalRedirectionReason {
+  unknown = 0;
+  busy = 1;
+  noReply = 2;
+  unconditional = 3;
+}
+enum RedirectingIndicator {
+  noRedirection = 0;
+  reRouted = 1;
+  reRoutedAllRestricted = 2;
+  diversion = 3;
+  diversionAllRestricted = 4;
+  reRoutedRestricted = 5;
+  diversionRestricted = 6;
+  spare = 7;
+}
+enum USIServiceIndicator {
+  global = 1;
+  local = 2;
+}
+enum SetupModeType {
+  normal = 1;
+  dummy = 2;
+  internal = 3;
+  callback = 4;
+  parking = 5;
+  supervise = 6;
+  acd = 7;
+}
+message SetupIRType {
+  optional string domain = 0;
+  optional CalledPartyNumber calledPartyNumber = 1 [default = undefined];
+  optional CalledPartysCategory calledPartysCategory = 2 [default = undefined];
+  optional CallingPartyNumber callingPartyNumber = 3 [default = undefined];
+  optional CallingPartysCategory callingPartysCategory = 4 [default = undefined];
+  optional bytes locationNumber = 5 [default = undefined];
+  optional OriginalCalledNumber originalCalledNumber = 6 [default = undefined];
+  optional bytes userTeleserviceInformation = 7 [default = undefined];
+  optional GenericNumbers genericNumber = 8 [default = undefined];
+  repeated string forwardCallIndicators = 9 [default = undefined];
+  optional RedirectingNumber redirectingNumber = 10 [default = undefined];
+  optional RedirectionInformation redirectingInformation = 11 [default = undefined];
+  optional USIServiceIndicator uSIServiceIndicator = 12 [default = undefined];
+  repeated string uSIInformation = 13 [default = undefined];
+  repeated uint64 isupCallRef = 14 [default = undefined];
+  optional SDPType sdp = 15;
+  optional bytes mediaPoint = 16 [default = undefined];
+  repeated bytes additionalInfo = 17;
+  optional TrunkGroupId trunkGroupId = 18 [default = undefined];
+  repeated string callingPartyInfo = 19 [default = undefined];
+  repeated string calledPartyInfo = 20 [default = undefined];
+  repeated string callingIfaceInfo = 21;
+  repeated string calledIfaceInfo = 22;
+  optional ReferType refer = 23 [default = undefined];
+  optional SetupModeType mode = 24 [default = normal];
+  optional EventTime eventTime = 25;
+}

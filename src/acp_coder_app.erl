@@ -1,4 +1,4 @@
--module(asn1encode_app).
+-module(acp_coder_app).
 
 -behaviour(application).
 
@@ -10,7 +10,7 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    asn1encode_sup:start_link().
+    acp_coder_sup:start_link().
 
 stop(_State) ->
     ok.

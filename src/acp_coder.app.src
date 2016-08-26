@@ -1,15 +1,14 @@
-{application, asn1encode,
+{application, acp_coder,
  [
   {description, ""},
+  {vsn, "1"},
   {parse_transform, pt_chronica},
-  {vsn, "0.0.1"},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib,
-                  chronica,
-                  asn1
+                  chronica
                  ]},
-  {mod, { asn1encode_app, []}},
+  {mod, { acp_coder_app, []}},
   {env, []}
  ]}.

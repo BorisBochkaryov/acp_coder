@@ -3,12 +3,12 @@
 -compile(inline).
 -compile({inline_size, 128}).
 
--export([test/1, encode/1, decode/1, encode_list/1, decode_list/1]).
+-export([test/1, encode/1, decode/1]).
 -include_lib("chronica/include/chronica.hrl").
--include_lib("../include/INCS3datatypes.hrl").
--include_lib("../include/INCS3Internals.hrl").
--include_lib("../include/ISUP.hrl").
--include_lib("../include/ACP.hrl").
+-include_lib("acp_lib/include/INCS3datatypes.hrl").
+-include_lib("acp_lib/include/INCS3Internals.hrl").
+-include_lib("acp_lib/include/ISUP.hrl").
+-include_lib("acp_lib/include/ACP.hrl").
 
 
 %%%%%% Defines
@@ -112,7 +112,7 @@ encode(Pack) ->
 
 encode_record(#'AcpMessage'{uri = Uri, callRef = CallRef, body = Body}) ->
   ResUri     = encode_binary(Uri),
-  ResCallRef = ?ENCODE_INTEGER(CallRef),
+  ResCallRef = encode_integer(CallRef),
   ResBody    = encode_record(Body),
   % result
   <<?R_AcpMessage,
@@ -235,7 +235,7 @@ encode_record(#'TrunkGroupId'{} = Term) ->
   TrunkGroupId  = encode_list(Term#'TrunkGroupId'.trunkGroupId),
   TrunkId       = encode_list(Term#'TrunkGroupId'.trunkId),
   PCMId         = encode_list(Term#'TrunkGroupId'.pCMId),
-  ChannelNumber = ?ENCODE_INTEGER(Term#'TrunkGroupId'.channelNumber),
+  ChannelNumber = encode_integer(Term#'TrunkGroupId'.channelNumber),
   <<?R_TrunkGroupId,
     TrunkGroupId/binary,
     TrunkId/binary,
@@ -265,7 +265,7 @@ encode_record({refer, List}) ->
 %%  Exchange = encode_list(Term#'ReferType'.exchange),
 %%  RoutingKey = encode_list(Term#'ReferType'.routingKey),
 %%  Sid = encode_binary(Term#'ReferType'.sid),
-%%  CallRef = ?ENCODE_INTEGER(Term#'ReferType'.callRef),
+%%  CallRef = encode_integer(Term#'ReferType'.callRef),
 %%  ConfId = encode_list(Term#'ReferType'.conf_id),
 %%  <<?R_ReferType, Exchange/binary, RoutingKey/binary, Sid/binary, CallRef/binary, ConfId/binary>>;
 encode_record(#'RedirectionNumber'{} = Term) ->
@@ -438,10 +438,10 @@ encode_record(#'SetupCRType'{} = Term) ->
     Refer/binary,
     EventTime/binary>>;
 encode_record(#'MLPPPrecedence'{} = Term) ->
-  Lfb               = ?ENCODE_INTEGER(Term#'MLPPPrecedence'.lfb),
-  PrecedenceLevel   = ?ENCODE_INTEGER(Term#'MLPPPrecedence'.precedenceLevel),
-  NetworkIdentity   = ?ENCODE_INTEGER(Term#'MLPPPrecedence'.network_identity),
-  MlppServiceDomain = ?ENCODE_INTEGER(Term#'MLPPPrecedence'.mlpp_service_domain),
+  Lfb               = encode_integer(Term#'MLPPPrecedence'.lfb),
+  PrecedenceLevel   = encode_integer(Term#'MLPPPrecedence'.precedenceLevel),
+  NetworkIdentity   = encode_integer(Term#'MLPPPrecedence'.network_identity),
+  MlppServiceDomain = encode_integer(Term#'MLPPPrecedence'.mlpp_service_domain),
   <<?R_MLPPPrecedence,
     Lfb/binary,
     PrecedenceLevel/binary,
@@ -682,8 +682,13 @@ encode_enum(_,undefined) -> ?Z_Undefined;
 encode_enum(_,Atom) -> ?ENCODE_UNKNOWN(Atom).
 
 
+encode_integer(undefined) -> ?Z_Undefined;
+encode_integer(Int) when is_number(Int) -> ?ENCODE_INTEGER(Int);
+encode_integer(Term) -> ?ENCODE_UNKNOWN(Term).
+
 encode_binary(undefined) -> ?Z_Undefined;
-encode_binary(Bin) -> ?ENCODE_BINARY(Bin).
+encode_binary(Bin) when is_binary(Bin)-> ?ENCODE_BINARY(Bin);
+encode_binary(Term) -> ?ENCODE_UNKNOWN(Term).
 
 
 encode_list(undefined) -> ?Z_Undefined;
@@ -726,7 +731,7 @@ decode(Pack) ->
 
 
 decode_record(<<?Undefined, Bin/binary>>) -> {undefined, Bin};
-decode_record(<<?UNKNOWN, Bin/binary>>) -> decode_unknown(Bin);
+decode_record(<<?UNKNOWN, _/binary>> = Term) -> decode_unknown(Term);
 decode_record(<<?R_AcpMessage, Bin0/binary>>) ->
   {Uri, Bin1}     = decode_binary(Bin0),
   {CallRef, Bin2} = decode_integer(Bin1),
@@ -1332,16 +1337,18 @@ decode_enum(<<?E_SetupModeType, 4, Bin/binary>>) -> {parking, Bin};
 decode_enum(<<?E_SetupModeType, 5, Bin/binary>>) -> {supervise, Bin};
 decode_enum(<<?E_SetupModeType, 6, Bin/binary>>) -> {acd, Bin}.
 
-
+decode_binary(<<?UNKNOWN,_/binary>> = BinTerm) -> decode_unknown(BinTerm);
 decode_binary(<<?Undefined,Bin/binary>>) -> {undefined, Bin};
 decode_binary(<<?T_Binary:3,SizeBin:5,Bin:SizeBin/binary,Rest/binary>>) -> {Bin, Rest}.
 
 
+decode_integer(<<?UNKNOWN,_/binary>> = BinTerm) -> decode_unknown(BinTerm);
 decode_integer(<<?T_Integer:3,SizeInt:5,Bin:SizeInt/binary,Rest/binary>>) ->
   Int = erlang:binary_to_integer(Bin),
   {Int,Rest}.
 
 
+decode_list(<<?UNKNOWN, _/binary>> = BinTerm) -> decode_unknown(BinTerm);
 decode_list(<<?Undefined, Rest/binary>>) -> {undefined, Rest};
 decode_list(<<?T_List, 0, Rest/binary>>) -> {[], Rest};
 decode_list(<<?T_String, Size, Bin/binary>>) -> % строка
@@ -1387,6 +1394,7 @@ decode_unknown(<<?UNKNOWN, Bin/binary>>) ->
   {Term, Bin2}.
 
 
+decode_bool(<<?UNKNOWN, _/binary>> = BinTerm) -> decode_unknown(BinTerm);
 decode_bool(<<?T_Bool:3, 0:5, Bin/binary>>) -> {false, Bin};
 decode_bool(<<?T_Bool:3, 1:5, Bin/binary>>) -> {true, Bin}.
 

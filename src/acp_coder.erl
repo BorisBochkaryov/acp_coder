@@ -10,7 +10,7 @@
 -compile(inline).
 -compile({inline_size, 128}).
 
--export([test/0, encode/1, decode/1]).
+-export([test/1, encode/1, decode/1]).
 -include_lib("chronica/include/chronica.hrl").
 -include("../include/INCS3datatypes.hrl").
 -include("../include/INCS3Internals.hrl").
@@ -166,10 +166,17 @@
 encode(Pack) ->
   log:debug("encode args: ~p", [Pack]),
   TimeStart = erlang:monotonic_time(micro_seconds),
-  Result = encode_record(Pack),
-  writeToLogs(TimeStart, Pack, Result),
-  log:debug("encode result: ~p", [Result]),
-  Result.
+  try encode_record(Pack) of
+    Result ->
+      writeToLogs(TimeStart, Pack, Result),
+      log:debug("encode result: ~p", [Result]),
+      Result
+  catch
+    error:_ ->
+      writeToError(["Unknown pack",Pack]),
+      ?ENCODE_UNKNOWN(Pack)
+  end.
+
 
 encode_record(#'AcpMessage'{uri = Uri, callRef = CallRef, body = Body}) ->
   ResUri     = encode_binary(Uri),
@@ -550,7 +557,7 @@ encode_record(#'RedirectionInformation'{} = Term) ->
     RedirectingReason/binary,
     RedirectionCounter/binary>>;
 encode_record(undefined) -> ?Z_Undefined;
-encode_record(Pack) -> writeToError(["Pack",Pack]), ?ENCODE_UNKNOWN(Pack).
+encode_record(Pack) -> writeToError(["Unknown Pack",Pack]), ?ENCODE_UNKNOWN(Pack).
 
 
 encode_enum(?E_CauseLittle,flash) -> <<?E_CauseLittle,0>>;
@@ -736,7 +743,7 @@ encode_enum(?E_RedirectionCounter, Atom) -> <<?E_RedirectionCounter, Atom/binary
 encode_enum(?E_ServingSide, calling) -> <<?E_ServingSide, 0>>;
 encode_enum(?E_ServingSide, called) -> <<?E_ServingSide, 1>>;
 encode_enum(_,undefined) -> ?Z_Undefined;
-encode_enum(Enum,Atom) -> writeToError(["Enum",Enum,Atom]), ?ENCODE_UNKNOWN(Atom).
+encode_enum(Enum,Atom) -> writeToError(["Unknown Enum",Enum,Atom]), ?ENCODE_UNKNOWN(Atom).
 
 
 encode_integer(undefined) -> ?Z_Undefined;
@@ -749,7 +756,7 @@ encode_time({MegaSec, Sec, MicSec}) -> ?ENCODE_TIME(MegaSec, Sec, MicSec).
 encode_binary(undefined) -> ?Z_Undefined;
 encode_binary(Bin) when erlang:is_binary(Bin)-> ?ENCODE_BINARY(Bin);
 encode_binary(Atom) when erlang:is_atom(Atom) -> ?ENCODE_UNKNOWN(Atom);
-encode_binary(Term) -> writeToError(["Binary",Term]), ?ENCODE_UNKNOWN(Term).
+encode_binary(Term) -> writeToError(["Unknows Binary",Term]), ?ENCODE_UNKNOWN(Term).
 
 
 encode_list(undefined) -> ?Z_Undefined;
@@ -787,7 +794,7 @@ encode_list_([H | T], Res, _) when erlang:is_atom(H) ->
   Bin = ?ENCODE_UNKNOWN(H),
   encode_list_(T, <<Res/binary, Bin/binary>>, unknown);
 encode_list_([H | T], Res, _) ->
-  writeToError(["List",H]),
+  writeToError(["Unknown list",H]),
   Bin = ?ENCODE_UNKNOWN(H),
   encode_list_(T, <<Res/binary, Bin/binary>>, unknown);
 encode_list_([], Res, _) -> Res.
@@ -879,12 +886,12 @@ encode_tuple(Tuple) when ?GET_EL(1,Tuple) == media , ?SIZE(Tuple) == 6 ->
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == attribute , ?SIZE(Tuple) == 4 ->
   Type    = encode_binary(?GET_EL(2,Tuple)),
   Version = encode_binary(?GET_EL(3,Tuple)),
-  Atom    = ?ENCODE_UNKNOWN(?GET_EL(4,Tuple)),
+  Atom    = encode_binary(?GET_EL(4,Tuple)),
   <<?Tu_attribute,
     Type/binary,
     Version/binary,
     Atom/binary>>;
-encode_tuple(Tuple) when ?GET_EL(1,Tuple) == ss_entity ->
+encode_tuple(Tuple) when ?GET_EL(1,Tuple) == ss_entity , ?SIZE(Tuple) == 10 ->
   Atom1  = encode_binary(?GET_EL(2,Tuple)),
   Atom2  = encode_binary(?GET_EL(3,Tuple)),
   Number = encode_integer(?GET_EL(4,Tuple)),
@@ -954,16 +961,16 @@ encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'AdditionalISUPParam' , ?SIZE(Tuple
   <<?Tu_AdditionalISUPParam,
     Type/binary,
     Length/binary,
-    Value/binary>>;  
+    Value/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'SSNotification' , ?SIZE(Tuple) == 9 ->
-  SSFamily = ?ENCODE_UNKNOWN(?GET_EL(2,Tuple)),
-  CGPN = encode_record(?GET_EL(3,Tuple)),
-  CDPN = encode_record(?GET_EL(4,Tuple)),
-  ServingSide = encode_enum(?E_ServingSide,?GET_EL(5,Tuple)),
+  SSFamily         = ?ENCODE_UNKNOWN(?GET_EL(2,Tuple)),
+  CGPN             = encode_record(?GET_EL(3,Tuple)),
+  CDPN             = encode_record(?GET_EL(4,Tuple)),
+  ServingSide      = encode_enum(?E_ServingSide,?GET_EL(5,Tuple)),
   ServiceTimeStamp = encode_time(?GET_EL(6,Tuple)),
-  Participants = encode_list(?GET_EL(7,Tuple)),
-  Internal = ?ENCODE_BOOL(?GET_EL(8,Tuple)),
-  Args = encode_tuple(?GET_EL(9,Tuple)),
+  Participants     = encode_list(?GET_EL(7,Tuple)),
+  Internal         = ?ENCODE_BOOL(?GET_EL(8,Tuple)),
+  Args             = encode_tuple(?GET_EL(9,Tuple)),
   <<?Tu_SSNotification,
     SSFamily/binary,
     CGPN/binary,
@@ -981,14 +988,14 @@ encode_tuple({Key, Value} = Tuple) when ?SIZE(Tuple) == 2 , ?SIZE(Tuple) == 2 ->
 encode_tuple(<<>>) ->
   <<?B_Undefined>>;
 encode_tuple(Term) ->
-%  writeToError(["Tuple",Term]),
   ?ENCODE_UNKNOWN(Term).
+
 
 encode_value(Value) when erlang:is_list(Value) ->
   StrStatus = is_string(Value),
-  if
-    StrStatus == true -> ?ENCODE_STRING(Value);
-    true -> encode_list(Value)
+  case StrStatus of
+    true -> ?ENCODE_STRING(Value);
+    _ -> encode_list(Value)
   end;
 encode_value(Value) when erlang:is_tuple(Value) ->
   <<?R_Tuple,(encode_tuple(Value))/binary>>;
@@ -997,6 +1004,9 @@ encode_value(Value) when erlang:is_binary(Value) ->
 encode_value(Value) when erlang:is_number(Value) ->
   ?ENCODE_INTEGER(Value);
 encode_value(Value) when erlang:is_atom(Value) ->
+  ?ENCODE_UNKNOWN(Value);
+encode_value(Value) ->
+  writeToError(["Unknown value in {Key, Value}",Value]),
   ?ENCODE_UNKNOWN(Value).
 
 
@@ -1720,14 +1730,14 @@ decode_tuple(<<?Tu_sdp, Bin/binary>>) ->
     List3,
     List4}, Bin15};
 decode_tuple(<<?Tu_SSNotification, Bin/binary>>) ->
-  {SSFamily, Bin1} = decode_unknown(Bin),
-  {CGPN, Bin2} = decode_record(Bin1),
-  {CDPN, Bin3} = decode_record(Bin2),
-  {ServingSide, Bin4} = decode_enum(Bin3),
+  {SSFamily, Bin1}         = decode_unknown(Bin),
+  {CGPN, Bin2}             = decode_record(Bin1),
+  {CDPN, Bin3}             = decode_record(Bin2),
+  {ServingSide, Bin4}      = decode_enum(Bin3),
   {ServiceTimeStamp, Bin5} = decode_time(Bin4),
-  {Participants, Bin6} = decode_list(Bin5),
-  {Internal, Bin7} = decode_bool(Bin6),
-  {Args, Bin8} = decode_tuple(Bin7),
+  {Participants, Bin6}     = decode_list(Bin5),
+  {Internal, Bin7}         = decode_bool(Bin6),
+  {Args, Bin8}             = decode_tuple(Bin7),
   {{'SSNotification',
     SSFamily,
     CGPN,
@@ -1760,15 +1770,15 @@ decode_tuple(<<?Tu_connection, Bin/binary>>) ->
     Prot,
     Ip}, Bin3};
 decode_tuple(<<?Tu_SSEntity, Bin/binary>>) ->
-  {Atom1, Bin1} = decode_binary(Bin),
-  {Atom2, Bin2} = decode_binary(Bin1),
+  {Atom1, Bin1}  = decode_binary(Bin),
+  {Atom2, Bin2}  = decode_binary(Bin1),
   {Number, Bin3} = decode_integer(Bin2),
-  {Bool1, Bin4} = decode_bool(Bin3),
-  {Bool2, Bin5} = decode_bool(Bin4),
-  {Arg1, Bin6} = decode_binary(Bin5),
-  {List1, Bin7} = decode_list(Bin6),
-  {List2, Bin8} = decode_list(Bin7),
-  {List3, Bin9} = decode_list(Bin8),
+  {Bool1, Bin4}  = decode_bool(Bin3),
+  {Bool2, Bin5}  = decode_bool(Bin4),
+  {Arg1, Bin6}   = decode_binary(Bin5),
+  {List1, Bin7}  = decode_list(Bin6),
+  {List2, Bin8}  = decode_list(Bin7),
+  {List3, Bin9}  = decode_list(Bin8),
   {{ss_entity,
     Atom1,
     Atom2,
@@ -1808,7 +1818,7 @@ decode_tuple(<<?Tu_media, Bin/binary>>) ->
 decode_tuple(<<?Tu_attribute, Bin/binary>>) ->
   {Type, Bin1}    = decode_binary(Bin),
   {Version, Bin2} = decode_binary(Bin1),
-  {Atom, Bin3}    = decode_unknown(Bin2),
+  {Atom, Bin3}    = decode_binary(Bin2),
   {{attribute,
     Type,
     Version,
@@ -1828,7 +1838,7 @@ decode_tuple(<<?Tu_AdditionalISUPParam, Bin/binary>>) ->
     Length,
     Value}, Bin3};
 decode_tuple(<<?Tu_AdditionalSIP, Bin/binary>>) ->
-  {Msg, Bin1} = decode_list(Bin),
+  {Msg, Bin1}    = decode_list(Bin),
   {Params, Bin2} = decode_list(Bin1),
   {{'AdditionalSIP',
     Msg,
@@ -1865,7 +1875,7 @@ decode_tuple(<<?Tu_MediaId, Bin/binary>>) ->
   {{'MediaId',
     ResBin}, Bin1};
 decode_tuple(<<?Tu_keyvalue, SizeKey, BinKey:SizeKey/binary, Bin/binary>>) ->
-  Key = erlang:binary_to_term(BinKey),
+  Key           = erlang:binary_to_term(BinKey),
   {Value, Bin1} = decode_value(Bin),
   {{Key, Value}, Bin1};
 decode_tuple(<<?B_Undefined, Bin/binary>>) ->
@@ -1911,27 +1921,26 @@ is_string(List) ->
 
 
 %%%%%% Test from list with packets
-test() ->
-  {ok, List} = file:consult("../../../../wireshark/trace\ ACP/trace\ only\ acpmessage.log"),
-%  {ok, List} = file:consult("../../../full1.log"),
-  test(List).
+test(File) ->
+  {ok, List} = file:consult(File),
+  test_(List).
 
-test([Pack | T]) ->
-  Before = erlang:length(lists:flatten(io_lib:format("~p",[Pack]))),
+test_([Pack | T]) ->
+  Before = ?SIZE(term_to_binary(Pack)),
   Time = erlang:monotonic_time(micro_seconds),
   Binary = encode(Pack),
-  io:format("Encode time = ~p~n",[(erlang:monotonic_time(micro_seconds) - Time)]),
+  log:trace([acpCoderTrace],"Encode time = ~p~n",[(erlang:monotonic_time(micro_seconds) - Time)]),
   After = ?SIZE(Binary),
   Time1 = erlang:monotonic_time(micro_seconds),
   ResPack = decode(Binary),
   if Pack /= ResPack ->
-      io:format("Error Packet~n~p~nResPack~p~n~n",[Pack,ResPack]);
+      log:trace([acpCoderTrace],"Error Packet~n~p~nResPack~p~n~n",[Pack,ResPack]);
     true ->
-      io:format("Decode time = ~p~n",[(erlang:monotonic_time(micro_seconds) - Time1)]),
-      io:format("Before size = ~p~nAfter size = ~p~nCompress = ~.2f%~n~n",[Before,After,(1-After/Before)*100])
+      log:trace([acpCoderTrace],"Decode time = ~p~n",[(erlang:monotonic_time(micro_seconds) - Time1)]),
+      log:trace([acpCoderTrace],"Before size = ~p~nAfter size = ~p~nCompress = ~.2f%~n~n",[Before,After,(1-After/Before)*100])
   end,
-  test(T);
-test([]) -> ok.
+  test_(T);
+test_([]) -> ok.
 
 
 %%%%%% Logs
@@ -1948,5 +1957,4 @@ writeToLogs(TimeStart, Packet, Result) ->
 
 
 writeToError(Packet) ->
-  io:format("~p~n",[Packet]),
   log:error([acpCoderError],"~nError packet:~p~n~n",[Packet]).

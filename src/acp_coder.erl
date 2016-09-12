@@ -30,6 +30,10 @@
 -define(T_Bool, 5).
 -define(T_String, 6).
 -define(T_IrregularList, 7).
+-define(T_Bool_true, 8).
+-define(T_Bool_false, 9).
+-define(T_Binary_Long, 10).
+-define(T_Integer_Long, 11).
 
 % Records
 -define(R_AcpMessage,1).
@@ -123,18 +127,35 @@
 -define(SIZE(Bin), erlang:size(Bin)).
 -define(GET_EL(N,Tuple), erlang:element(N,Tuple)).
 
--define(ENCODE_BINARY(Bin), <<?T_Binary:3, (?SIZE(Bin)):5, Bin/binary>>).
+-define(ENCODE_BINARY(Bin), <<?T_Binary, (?SIZE(Bin)):8, Bin/binary>>).
+-define(ENCODE_LONG_BINARY(Bin), <<?T_Binary_Long, (?SIZE(Bin)):24, Bin/binary>>).
+-define(ENCODE_LONG_INTEGER(Bin, Size),
+  begin
+    Size = ?SIZE(BinInt),
+    if
+      Size =< 16#FFFFFF ->
+        <<?T_Integer_Long, (?SIZE(Bin)):24, Bin/binary>>;
+      true ->
+        erlang:throw({error_encode_long_integer, Bin})
+    end
+  end).
 -define(ENCODE_INTEGER(Int),
   begin
     BinInt = erlang:term_to_binary(Int, [{compressed,4}]),
-    <<?T_Integer:3, (?SIZE(BinInt)):5, BinInt/binary>>
+    Size = ?SIZE(BinInt),
+    if
+      Size =< 16#FF ->
+        <<?T_Integer, Size:8, BinInt/binary>>;
+      true ->
+        ?ENCODE_LONG_INTEGER(BinInt, Size)
+    end
   end).
 -define(ENCODE_STRING(Str),
   begin
     BinStr = erlang:list_to_binary(Str),
     <<?T_String, (?SIZE(BinStr)), BinStr/binary>>
   end).
--define(ENCODE_BOOL(Atom), case Atom of false -> <<?T_Bool:3, 0:5>>; _ -> <<?T_Bool:3, 1:5>> end).
+-define(ENCODE_BOOL(Atom), case Atom of false -> <<?T_Bool_false>>; true -> <<?T_Bool_true>>; undefined -> <<?Undefined>> end).
 -define(ENCODE_UNKNOWN(Term),
   begin
     BinTerm = erlang:term_to_binary(Term,[{compressed,4}]),
@@ -152,8 +173,10 @@
   end).
 
 
--define(DECODE_BINARY, <<?T_Binary:3, Size:5, _Bin:Size/binary, _Rest/binary>>).
--define(DECODE_INTEGER, <<?T_Integer:3, _Size:5, _Bin/binary>>).
+-define(DECODE_BINARY, <<?T_Binary, Size:8, _Bin:Size/binary, _Rest/binary>>).
+-define(DECODE_LONG_BINARY, <<?T_Binary_Long, Size:24, _Bin:Size/binary, _Rest/binary>>).
+-define(DECODE_INTEGER, <<?T_Integer, _Size:8, _Bin/binary>>).
+-define(DECODE_LONG_INTEGER, <<?T_Integer_Long, Size:24, _Bin:Size/binary, _Rest/binary>>).
 -define(DECODE_STRING, <<?T_String, _Size, _Bin/binary>>).
 -define(DECODE_LIST, <<?T_List, _Bin/binary>>).
 -define(DECODE_UNKNOWN, <<?UNKNOWN, _Bin/binary>>).
@@ -168,7 +191,7 @@ encode(Pack) ->
   TimeStart = erlang:monotonic_time(micro_seconds),
   try encode_record(Pack) of
     Result ->
-      writeToLogs(TimeStart, Pack, Result),
+      writeToLogs(TimeStart, Pack, Result, encode),
       log:debug("encode result: ~p", [Result]),
       Result
   catch
@@ -354,7 +377,6 @@ encode_record(#'RedirectionNumber'{} = Term) ->
     Nai/binary,
     Ni/binary,
     Incomplete/binary,
-    Npi/binary,
     Inni/binary,
     Npi/binary,
     Digits/binary,
@@ -605,6 +627,7 @@ encode_enum(?E_Cause, genericPreemption) -> <<?E_Cause, 40>>;
 encode_enum(?E_Cause, nonIpPreemption) -> <<?E_Cause, 41>>;
 encode_enum(?E_Cause, hole) -> <<?E_Cause, 42>>;
 encode_enum(?E_Cause, hold) -> <<?E_Cause, 43>>;
+encode_enum(?E_Cause, session_timeout) -> <<?E_Cause, 44>>;
 encode_enum(?E_CauseInitiator, user) -> <<?E_CauseInitiator, 0>>;
 encode_enum(?E_CauseInitiator, isup_network) -> <<?E_CauseInitiator, 1>>;
 encode_enum(?E_CauseInitiator, non_isup_network) -> <<?E_CauseInitiator, 2>>;
@@ -651,10 +674,10 @@ encode_enum(?E_APRIType, addressNotAvailable) -> <<?E_APRIType, 2>>;
 encode_enum(?E_APRIType, spare) -> <<?E_APRIType, 3>>;
 encode_enum(?E_RedirectionRestrictionIndicator, presentation_allowed) -> <<?E_RedirectionRestrictionIndicator, 0>>;
 encode_enum(?E_RedirectionRestrictionIndicator, presentation_restricted) -> <<?E_RedirectionRestrictionIndicator, 1>>;
-encode_enum(?E_NotificationSubscriptionOptions, unknown) -> <<?E_NotificationSubscriptionOptions, 1>>;
-encode_enum(?E_NotificationSubscriptionOptions, presentation_not_allowed) -> <<?E_NotificationSubscriptionOptions, 2>>;
-encode_enum(?E_NotificationSubscriptionOptions, presentation_allowed_with_redirecting_number) -> <<?E_NotificationSubscriptionOptions, 3>>;
-encode_enum(?E_NotificationSubscriptionOptions, presentation_allowed_without_redirecting_number) -> <<?E_NotificationSubscriptionOptions, 4>>;
+encode_enum(?E_NotificationSubscriptionOptions, unknown) -> <<?E_NotificationSubscriptionOptions, 0>>;
+encode_enum(?E_NotificationSubscriptionOptions, presentation_not_allowed) -> <<?E_NotificationSubscriptionOptions, 1>>;
+encode_enum(?E_NotificationSubscriptionOptions, presentation_allowed_with_redirecting_number) -> <<?E_NotificationSubscriptionOptions, 2>>;
+encode_enum(?E_NotificationSubscriptionOptions, presentation_allowed_without_redirecting_number) -> <<?E_NotificationSubscriptionOptions, 3>>;
 encode_enum(?E_RedirectingReason, unknown) -> <<?E_RedirectingReason, 0>>;
 encode_enum(?E_RedirectingReason, busy) -> <<?E_RedirectingReason, 1>>;
 encode_enum(?E_RedirectingReason, noReply) -> <<?E_RedirectingReason, 2>>;
@@ -754,7 +777,8 @@ encode_time({MegaSec, Sec, MicSec}) -> ?ENCODE_TIME(MegaSec, Sec, MicSec).
 
 
 encode_binary(undefined) -> ?Z_Undefined;
-encode_binary(Bin) when erlang:is_binary(Bin)-> ?ENCODE_BINARY(Bin);
+encode_binary(Bin) when erlang:is_binary(Bin) , ?SIZE(Bin) =< 16#FF -> ?ENCODE_BINARY(Bin);
+encode_binary(Bin) when erlang:is_binary(Bin) , ?SIZE(Bin) =< 16#FFFFFF -> ?ENCODE_LONG_BINARY(Bin);
 encode_binary(Atom) when erlang:is_atom(Atom) -> ?ENCODE_UNKNOWN(Atom);
 encode_binary(Term) -> writeToError(["Unknows Binary",Term]), ?ENCODE_UNKNOWN(Term).
 
@@ -1014,13 +1038,20 @@ encode_value(Value) ->
 decode(Pack) ->
   log:debug("decode args: ~p", [Pack]),
   TimeStart = erlang:monotonic_time(micro_seconds),
-  case decode_record(Pack) of
-    {Result, <<>>} ->
-      writeToLogs(TimeStart, Pack, Result),
-      Result;
-    _ ->
-      erlang:throw({decode_error, Pack})
-  end.
+  try decode_record(Pack) of
+    Packet ->
+      case Packet of
+        {Result, <<>>} ->
+        writeToLogs(TimeStart, Pack, Result, decode),
+        Result;
+      _ ->
+        erlang:throw({decode_error, Pack})
+      end
+    catch
+      _:_ ->
+        log:error("decode error for ~p",[Pack]),
+        erlang:throw({decode_error, Pack})
+    end.
 
 
 decode_record(?DECODE_UNDEFINED) -> {undefined, _Bin};
@@ -1437,8 +1468,7 @@ decode_record(<<?R_SetupIRType, Bin/binary>>) ->
     eventTime                  = EventTime
   }, Bin27}.
 
-
-decode_enum(?DECODE_UNKNOWN) -> decode_unknown(_Bin);
+decode_enum(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
 decode_enum(?DECODE_UNDEFINED) -> {undefined, _Bin};
 decode_enum(<<?E_CauseLittle, 0, Bin/binary>>) -> {flash, Bin};
 decode_enum(<<?E_CauseLittle, 1, Bin/binary>>) -> {refer, Bin};
@@ -1485,6 +1515,7 @@ decode_enum(<<?E_Cause, 40, Bin/binary>>) -> {genericPreemption, Bin};
 decode_enum(<<?E_Cause, 41, Bin/binary>>) -> {nonIpPreemption, Bin};
 decode_enum(<<?E_Cause, 42, Bin/binary>>) -> {hole, Bin};
 decode_enum(<<?E_Cause, 43, Bin/binary>>) -> {hold, Bin};
+decode_enum(<<?E_Cause, 44, Bin/binary>>) -> {session_timeout, Bin};
 decode_enum(<<?E_CauseInitiator, 0, Bin/binary>>) -> {user, Bin};
 decode_enum(<<?E_CauseInitiator, 1, Bin/binary>>) -> {isup_network, Bin};
 decode_enum(<<?E_CauseInitiator, 2, Bin/binary>>) -> {non_isup_network, Bin};
@@ -1626,14 +1657,18 @@ decode_enum(<<?E_ServingSide, 1, Bin/binary>>) -> {called, Bin}.
 
 decode_binary(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
 decode_binary(?DECODE_UNDEFINED) -> {undefined, _Bin};
-decode_binary(?DECODE_BINARY) -> {_Bin, _Rest}.
+decode_binary(?DECODE_BINARY) -> {_Bin, _Rest};
+decode_binary(?DECODE_LONG_BINARY) -> {_Bin, _Rest}.
 
 
+decode_integer(?DECODE_UNDEFINED) -> {undefined, _Bin};
 decode_integer(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
 decode_integer(?DECODE_INTEGER) ->
   BinInt = binary:part(_Bin, {0,_Size}),
   Int = erlang:binary_to_term(BinInt),
-  {Int,binary:part(_Bin, {_Size, ?SIZE(_Bin) - _Size})}.
+  {Int,binary:part(_Bin, {_Size, ?SIZE(_Bin) - _Size})};
+decode_integer(?DECODE_LONG_INTEGER) ->
+  {binary_to_integer(_Bin),_Rest}.
 
 
 decode_time(?DECODE_TIME) ->
@@ -1902,8 +1937,9 @@ decode_unknown(?DECODE_UNKNOWN) ->
 
 
 decode_bool(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
-decode_bool(<<?T_Bool:3, 0:5, Bin/binary>>) -> {false, Bin};
-decode_bool(<<?T_Bool:3, 1:5, Bin/binary>>) -> {true, Bin}.
+decode_bool(<<?Undefined, Bin/binary>>) -> {undefined, Bin};
+decode_bool(<<?T_Bool_false, Bin/binary>>) -> {false, Bin};
+decode_bool(<<?T_Bool_true, Bin/binary>>) -> {true, Bin}.
 
 
 % проверка на строку
@@ -1944,17 +1980,23 @@ test_([]) -> ok.
 
 
 %%%%%% Logs
-writeToLogs(TimeStart, Packet, Result) ->
-  log:trace([acpCoderTrace],"~n~p~n",[Packet]),
-  Calc = fun(Start, Pack, Res) ->
+writeToLogs(TimeStart, Packet, Result, Status) ->
+  log:debug([acpCoderTrace],"~n~p~n",[Packet]),
+  Calc = fun(Start, Pack, Res, Stat) ->
     End = erlang:monotonic_time(micro_seconds),
     Time = End - Start,
-    SizeBefore = erlang:length(lists:flatten(io_lib:format("~p",[Pack]))),
-    SizeAfter = ?SIZE(Res),
+    case Stat of
+      encode ->
+        SizeBefore = ?SIZE(term_to_binary(Pack)),
+        SizeAfter = ?SIZE(Res);
+      _ ->
+        SizeBefore = ?SIZE(term_to_binary(Res)),
+        SizeAfter = ?SIZE(Pack)
+    end,
     [Time, SizeBefore, SizeAfter, (1 - SizeAfter / SizeBefore) * 100]
   end,
-  log:trace([acpCoder],"~nTime: | Size before,after: | Compress:~n~p~n",[Calc(TimeStart,Packet,Result)]).
+  log:debug([acpCoder],"~nTime: | Size before,after: | Compress:~n~p~n",[Calc(TimeStart,Packet,Result, Status)]).
 
 
 writeToError(Packet) ->
-  log:error([acpCoderError],"~nError packet:~p~n~n",[Packet]).
+  log:trace([acpCoderError],"~nError packet:~p~n~n",[Packet]).

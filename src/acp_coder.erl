@@ -12,13 +12,18 @@
 
 -export([test/1, encode/1, decode/1]).
 -include_lib("chronica/include/chronica.hrl").
--include("../include/INCS3datatypes.hrl").
--include("../include/INCS3Internals.hrl").
--include("../include/ISUP.hrl").
--include("../include/ACP.hrl").
+-include("INCS3datatypes.hrl").
+-include("INCS3Internals.hrl").
+-include("ISUP.hrl").
+-include("ACP.hrl").
 
 
 %%%%%% Defines
+-define(VERSION,
+  begin
+      {_, Commit} = lists:split(7,os:cmd("git log -1 | head -1")),
+      string:strip(Commit, both, $\n)
+  end).
 -define(Z_Undefined, <<0>>).
 -define(Undefined, 0).
 
@@ -71,6 +76,9 @@
 -define(R_SetupConf, 33).
 -define(R_EventTime, 34).
 -define(R_Tuple, 35).
+-define(R_LocationNumber, 36).
+-define(R_CallerDisplayInformation, 37).
+-define(R_CallId, 38).
 -define(R_ErrorRecord, 253).
 -define(UNKNOWN, 254).
 
@@ -122,6 +130,15 @@
 -define(Tu_SSEntity, 16).
 -define(B_Undefined, 63).
 
+% Encode types
+-define(RECORD(Term), {record, Term}).
+-define(BINARY(Term), {binary, Term}).
+-define(INTEGER(Term), {integer, Term}).
+-define(ENUM(Enum,Term), {enum, Enum, Term}).
+-define(LIST(Term), {list, Term}).
+-define(BOOL(Term), {bool, Term}).
+-define(TIME(Term), {time, Term}).
+-define(UNKNOWN(Term), {unknown, Term}).
 
 %%%%%% Macros
 -define(SIZE(Bin), erlang:size(Bin)).
@@ -200,384 +217,326 @@ encode(Pack) ->
       ?ENCODE_UNKNOWN(Pack)
   end.
 
+encodeFromList([{binary, H} | T]) ->
+  <<(encode_binary(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{integer, H} | T]) ->
+  <<(encode_integer(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{record, H} | T]) ->
+  <<(encode_record(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{enum, H1, H2} | T]) ->
+  <<(encode_enum(H1, H2))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{list, H} | T]) ->
+  <<(encode_list(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{bool, H} | T]) ->
+  <<(?ENCODE_BOOL(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{time, H} | T]) ->
+  <<(encode_time(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{unknown, H} | T]) ->
+  <<(?ENCODE_UNKNOWN(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([]) ->
+  <<>>.
 
 encode_record(#'AcpMessage'{uri = Uri, callRef = CallRef, body = Body}) ->
-  ResUri     = encode_binary(Uri),
-  ResCallRef = encode_integer(CallRef),
-  ResBody    = encode_record(Body),
-  % result
+  Bin = encodeFromList([?BINARY(Uri),
+                        ?INTEGER(CallRef),
+                        ?RECORD(Body)]),
   <<?R_AcpMessage,
-    ResUri/binary,
-    ResCallRef/binary,
-    ResBody/binary>>;
+    (?ENCODE_STRING(?VERSION))/binary,
+    Bin/binary>>;
 encode_record(#'ServiceFeatureInd'{arg = Arg}) ->
-  ResArg = encode_record(Arg),
+  Bin = encodeFromList([?RECORD(Arg)]),
   <<?R_ServiceFeatureInd,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'ServiceFeatureType'{cause = Cause, additionalInfo = AddInfo}) ->
-  ResCause   = encode_enum(?E_CauseLittle,Cause),
-  ResAddInfo = encode_list(AddInfo),
+  Bin = encodeFromList([?ENUM(?E_CauseLittle,Cause),
+                        ?LIST(AddInfo)]),
   <<?R_ServiceFeatureType,
-    ResCause/binary,
-    ResAddInfo/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupReqAck'{arg = Arg}) ->
-  ResArg = encode_record(Arg),
+  Bin = encodeFromList([?RECORD(Arg)]),
   <<?R_SetupReqAck,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupIndAck'{arg = Arg}) ->
-  ResArg = encode_record(Arg),
+  Bin = encodeFromList([?RECORD(Arg)]),
   <<?R_SetupIndAck,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupAckType'{refer = Refer, trunkGroupId = TrunkGId}) ->
-  ResRefer    = encode_record(Refer),
-  ResTrunkGId = encode_record(TrunkGId),
+  Bin = encodeFromList([?RECORD(Refer),
+                        ?RECORD(TrunkGId)]),
   % Arg
   <<?R_SetupAckType,
-    ResRefer/binary,
-    ResTrunkGId/binary>>;
+    Bin/binary>>;
 encode_record(#'CallProgressReq'{arg = Arg}) ->
-  ResArg = encode_record(Arg),
+  Bin = encodeFromList([?RECORD(Arg)]),
   <<?R_CallProgressReq,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'CallProgressInd'{arg = Arg}) ->
-  ResArg = encode_record(Arg),
+  Bin = encodeFromList([?RECORD(Arg)]),
   <<?R_CallProgressInd,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'CallProgressType'{} = Term) ->
-  Cause              = encode_enum(?E_Cause,Term#'CallProgressType'.cause),
-  CauseInitiator     = encode_enum(?E_CauseInitiator,Term#'CallProgressType'.causeInitiator),
-  CauseDescription   = encode_list(Term#'CallProgressType'.causeDescription),
-  CauseIsup          = encode_binary(Term#'CallProgressType'.causeIsup),
-  EventInformation   = encode_record(Term#'CallProgressType'.eventInformation),
-  AdditionalInfo     = encode_list(Term#'CallProgressType'.additionalInfo),
-  OBCI               = encode_record(Term#'CallProgressType'.oBCI),
-  GNotification      = encode_list(Term#'CallProgressType'.gNotification),
-  RedirectionNumber  = encode_record(Term#'CallProgressType'.redirectionNumber),
-  RedirectionResInd  = encode_enum(?E_RedirectionRestrictionIndicator,Term#'CallProgressType'.redirectionRestInd),
-  CallDiversionInfo  = encode_record(Term#'CallProgressType'.callDiversionInfo),
-  Facility           = encode_list(Term#'CallProgressType'.facility),
-  SDP                = encode_record(Term#'CallProgressType'.sdp),
-  MediaPoint         = encode_binary(Term#'CallProgressType'.mediaPoint),
-  TrunkGroupId       = encode_record(Term#'CallProgressType'.trunkGroupId),
-  CallTransferNumber = encode_record(Term#'CallProgressType'.callTransferNumber),
-  Refer              = encode_record(Term#'CallProgressType'.refer),
-  EventTime          = encode_time(Term#'CallProgressType'.eventTime),
+  Bin = encodeFromList([?ENUM(?E_Cause,Term#'CallProgressType'.cause),
+                        ?ENUM(?E_CauseInitiator,Term#'CallProgressType'.causeInitiator),
+                        ?LIST(Term#'CallProgressType'.causeDescription),
+                        ?BINARY(Term#'CallProgressType'.causeIsup),
+                        ?RECORD(Term#'CallProgressType'.eventInformation),
+                        ?LIST(Term#'CallProgressType'.additionalInfo),
+                        ?RECORD(Term#'CallProgressType'.oBCI),
+                        ?LIST(Term#'CallProgressType'.gNotification),
+                        ?RECORD(Term#'CallProgressType'.redirectionNumber),
+                        ?ENUM(?E_RedirectionRestrictionIndicator,Term#'CallProgressType'.redirectionRestInd),
+                        ?RECORD(Term#'CallProgressType'.callDiversionInfo),
+                        ?LIST(Term#'CallProgressType'.facility),
+                        ?RECORD(Term#'CallProgressType'.callId),
+                        ?RECORD(Term#'CallProgressType'.sdp),
+                        ?BINARY(Term#'CallProgressType'.mediaPoint),
+                        ?RECORD(Term#'CallProgressType'.trunkGroupId),
+                        ?RECORD(Term#'CallProgressType'.callTransferNumber),
+                        ?RECORD(Term#'CallProgressType'.refer),
+                        ?TIME(Term#'CallProgressType'.eventTime)]),
   <<?R_CallProgressType,
-    Cause/binary,
-    CauseInitiator/binary,
-    CauseDescription/binary,
-    CauseIsup/binary,
-    EventInformation/binary,
-    AdditionalInfo/binary,
-    OBCI/binary,
-    GNotification/binary,
-    RedirectionNumber/binary,
-    RedirectionResInd/binary,
-    CallDiversionInfo/binary,
-    Facility/binary,
-    SDP/binary,
-    MediaPoint/binary,
-    TrunkGroupId/binary,
-    CallTransferNumber/binary,
-    Refer/binary,
-    EventTime/binary>>;
+    Bin/binary>>;
 encode_record(#'EventInformation'{} = Term) ->
-  EvInd   = encode_enum(?E_EventIndicator,Term#'EventInformation'.eventIndicator),
-  EvPrInd = encode_enum(?E_EventPresentationRestrictedIndicator,Term#'EventInformation'.eventPresentationIndicator),
+  Bin = encodeFromList([?ENUM(?E_EventIndicator,Term#'EventInformation'.eventIndicator),
+                        ?ENUM(?E_EventPresentationRestrictedIndicator,Term#'EventInformation'.eventPresentationIndicator)]),
   <<?R_EventInformation,
-    EvInd/binary,
-    EvPrInd/binary>>;
+    Bin/binary>>;
 encode_record(#'OptionalBackwardCallIndicators'{} = Term) ->
-  InbII                 = encode_enum(?E_InBandInfoIndicator,Term#'OptionalBackwardCallIndicators'.inbInfoInd),
-  CallDiversionInd      = encode_enum(?E_CallDiversionIndicator,Term#'OptionalBackwardCallIndicators'.callDiversionInd),
-  SimpleSegmentationInf = encode_enum(?E_SimpleSegmentationIndicator,Term#'OptionalBackwardCallIndicators'.simpleSegmentationInf),
-  MlppUserInd           = encode_enum(?E_MLPPUserIndicator,Term#'OptionalBackwardCallIndicators'.mlppUserInd),
+  Bin = encodeFromList([?ENUM(?E_InBandInfoIndicator,Term#'OptionalBackwardCallIndicators'.inbInfoInd),
+                        ?ENUM(?E_CallDiversionIndicator,Term#'OptionalBackwardCallIndicators'.callDiversionInd),
+                        ?ENUM(?E_SimpleSegmentationIndicator,Term#'OptionalBackwardCallIndicators'.simpleSegmentationInf),
+                        ?ENUM(?E_MLPPUserIndicator,Term#'OptionalBackwardCallIndicators'.mlppUserInd)]),
   <<?R_OptionalBackwardCallIndicators,
-    InbII/binary,
-    CallDiversionInd/binary,
-    SimpleSegmentationInf/binary,
-    MlppUserInd/binary>>;
+    Bin/binary>>;
 encode_record(#'RedirectingNumber'{} = Term) ->
-  Nai        = encode_enum(?E_NAIType, Term#'RedirectingNumber'.nai),
-  Ni         = encode_enum(?E_NIType, Term#'RedirectingNumber'.ni),
-  Incomplete = ?ENCODE_BOOL(Term#'RedirectingNumber'.incomplete),
-  Npi        = encode_enum(?E_NPIType,Term#'RedirectingNumber'.npi),
-  Apri       = encode_enum(?E_APRIType,Term#'RedirectingNumber'.apri),
-  Digits     = encode_list(Term#'RedirectingNumber'.digits),
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'RedirectingNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'RedirectingNumber'.ni),
+                        ?BOOL(Term#'RedirectingNumber'.incomplete),
+                        ?ENUM(?E_NPIType,Term#'RedirectingNumber'.npi),
+                        ?ENUM(?E_APRIType,Term#'RedirectingNumber'.apri),
+                        ?ENUM(?E_CallingPartysCategory,Term#'RedirectingNumber'.category),
+                        ?LIST(Term#'RedirectingNumber'.digits),
+                        ?LIST(Term#'RedirectingNumber'.displayName),
+                        ?LIST(Term#'RedirectingNumber'.sipUri),
+                        ?LIST(Term#'RedirectingNumber'.vdn)]),
   <<?R_RedirectingNumber,
-    Nai/binary,
-    Ni/binary,
-    Incomplete/binary,
-    Npi/binary, Apri/binary,
-    Digits/binary>>;
+    Bin/binary>>;
 encode_record(#'CallDiversionInformation'{} = Term) ->
-  NotifSubsOpts     = encode_enum(?E_NotificationSubscriptionOptions, Term#'CallDiversionInformation'.notificationSubsOpts),
-  RedirectingReason = encode_enum(?E_RedirectingReason, Term#'CallDiversionInformation'.redirectingReason),
+  Bin = encodeFromList([?ENUM(?E_NotificationSubscriptionOptions, Term#'CallDiversionInformation'.notificationSubsOpts),
+                        ?ENUM(?E_RedirectingReason, Term#'CallDiversionInformation'.redirectingReason)]),
   <<?R_CallDiversionInformation,
-    NotifSubsOpts/binary,
-    RedirectingReason/binary>>;
+    Bin/binary>>;
 encode_record(#'SDPType'{} = Term) ->
-  Type = encode_enum(?E_TypeSDPType, Term#'SDPType'.type),
-  Body = encode_list(Term#'SDPType'.body),
+  Bin = encodeFromList([?ENUM(?E_TypeSDPType, Term#'SDPType'.type),
+                        ?LIST(Term#'SDPType'.body)]),
   <<?R_SDPType,
-    Type/binary,
-    Body/binary>>;
+    Bin/binary>>;
 encode_record(#'TrunkGroupId'{} = Term) ->
-  TrunkGroupId  = encode_list(Term#'TrunkGroupId'.trunkGroupId),
-  TrunkId       = encode_list(Term#'TrunkGroupId'.trunkId),
-  PCMId         = encode_list(Term#'TrunkGroupId'.pCMId),
-  ChannelNumber = encode_integer(Term#'TrunkGroupId'.channelNumber),
+  Bin = encodeFromList([?LIST(Term#'TrunkGroupId'.trunkGroupId),
+                        ?LIST(Term#'TrunkGroupId'.trunkId),
+                        ?LIST(Term#'TrunkGroupId'.pCMId),
+                        ?INTEGER(Term#'TrunkGroupId'.channelNumber)]),
   <<?R_TrunkGroupId,
-    TrunkGroupId/binary,
-    TrunkId/binary,
-    PCMId/binary,
-    ChannelNumber/binary>>;
+    Bin/binary>>;
 encode_record(#'CallTransferNumber'{} = Term) ->
-  Nai        = encode_enum(?E_NAIType, Term#'CallTransferNumber'.nai),
-  Ni         = encode_enum(?E_NIType, Term#'CallTransferNumber'.ni),
-  Incomplete = ?ENCODE_BOOL(Term#'CallTransferNumber'.incomplete),
-  Npi        = encode_enum(?E_NPIType,Term#'CallTransferNumber'.npi),
-  Apri       = encode_enum(?E_APRIType,Term#'CallTransferNumber'.apri),
-  Screening  = encode_enum(?E_ScreeningType,Term#'CallTransferNumber'.screening),
-  Digits     = encode_list(Term#'CallTransferNumber'.digits),
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'CallTransferNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'CallTransferNumber'.ni),
+                        ?BOOL(Term#'CallTransferNumber'.incomplete),
+                        ?ENUM(?E_NPIType,Term#'CallTransferNumber'.npi),
+                        ?ENUM(?E_APRIType,Term#'CallTransferNumber'.apri),
+                        ?ENUM(?E_ScreeningType,Term#'CallTransferNumber'.screening),
+                        ?ENUM(?E_CallingPartysCategory,Term#'CallTransferNumber'.category),
+                        ?LIST(Term#'CallTransferNumber'.digits),
+                        ?LIST(Term#'CallTransferNumber'.displayName),
+                        ?LIST(Term#'CallTransferNumber'.sipUri),
+                        ?LIST(Term#'CallTransferNumber'.vdn)]),
   <<?R_CallTransferNumber,
-    Nai/binary,
-    Ni/binary,
-    Incomplete/binary,
-    Npi/binary,
-    Apri/binary,
-    Screening/binary,
-    Digits/binary>>;
+    Bin/binary>>;
 encode_record({refer, List}) ->
-  Chunt = encode_list(List),
+  Bin = encodeFromList([?LIST(List)]),
   <<?R_Refer,
-    Chunt/binary>>;
+    Bin/binary>>;
 encode_record(#'ReferType'{} = Term) ->
-  Exchange   = encode_list(Term#'ReferType'.exchange),
-  RoutingKey = encode_list(Term#'ReferType'.routingKey),
-  Sid        = encode_binary(Term#'ReferType'.sid),
-  CallRef    = encode_integer(Term#'ReferType'.callRef),
-  ConfId     = encode_list(Term#'ReferType'.conf_id),
+  Bin = encodeFromList([?LIST(Term#'ReferType'.exchange),
+                        ?LIST(Term#'ReferType'.routingKey),
+                        ?BINARY(Term#'ReferType'.sid),
+                        ?INTEGER(Term#'ReferType'.callRef),
+                        ?LIST(Term#'ReferType'.conf_id)]),
   <<?R_ReferType,
-    Exchange/binary,
-    RoutingKey/binary,
-    Sid/binary,
-    CallRef/binary,
-    ConfId/binary>>;
+    Bin/binary>>;
 encode_record(#'RedirectionNumber'{} = Term) ->
-  Nai         = encode_enum(?E_NAIType, Term#'RedirectionNumber'.nai),
-  Ni          = encode_enum(?E_NIType, Term#'RedirectionNumber'.ni),
-  Incomplete  = ?ENCODE_BOOL(Term#'RedirectionNumber'.incomplete),
-  Inni        = encode_enum(?E_INNIType, Term#'RedirectionNumber'.inni),
-  Npi         = encode_enum(?E_NPIType,Term#'RedirectionNumber'.npi),
-  Digits      = encode_list(Term#'RedirectionNumber'.digits),
-  DisplayName = encode_list(Term#'RedirectionNumber'.displayName),
-  SipUri      = encode_list(Term#'RedirectionNumber'.sipUri),
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'RedirectionNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'RedirectionNumber'.ni),
+                        ?BOOL(Term#'RedirectionNumber'.incomplete),
+                        ?ENUM(?E_INNIType, Term#'RedirectionNumber'.inni),
+                        ?ENUM(?E_NPIType,Term#'RedirectionNumber'.npi),
+                        ?ENUM(?E_CallingPartysCategory,Term#'RedirectionNumber'.category),
+                        ?LIST(Term#'RedirectionNumber'.digits),
+                        ?LIST(Term#'RedirectionNumber'.displayName),
+                        ?LIST(Term#'RedirectionNumber'.sipUri),
+                        ?LIST(Term#'RedirectionNumber'.vdn)]),
   <<?R_RedirectionNumber,
-    Nai/binary,
-    Ni/binary,
-    Incomplete/binary,
-    Inni/binary,
-    Npi/binary,
-    Digits/binary,
-    DisplayName/binary,
-    SipUri/binary>>;
-encode_record(#'ReleaseReq'{} = Term) ->
-  ResArg = encode_record(Term#'ReleaseReq'.arg),
+    Bin/binary>>;
+encode_record(#'ReleaseReq'{arg = Arg}) ->
+  Bin = encodeFromList([?RECORD(Arg)]),
   <<?R_ReleaseReq,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'ReleaseType'{} = Term) ->
-  Cause            = encode_enum(?E_Cause, Term#'ReleaseType'.cause),
-  CauseInitiator   = encode_enum(?E_CauseInitiator, Term#'ReleaseType'.causeInitiator),
-  CauseDescription = encode_list(Term#'ReleaseType'.causeDescription),
-  Digits           = encode_list(Term#'ReleaseType'.dialledDigits),
-  CauseIsup        = encode_binary(Term#'ReleaseType'.causeIsup),
-  AdditionalInfo   = encode_list(Term#'ReleaseType'.additionalInfo),
-  TrunkGroupId     = encode_record(Term#'ReleaseType'.trunkGroupId),
-  Sid              = encode_binary(Term#'ReleaseType'.sid),
-  Refer            = encode_record(Term#'ReleaseType'.refer),
-  NeedAck          = ?ENCODE_BOOL(Term#'ReleaseType'.need_ack),
-  EventTime        = encode_time(Term#'ReleaseType'.eventTime),
+  Bin = encodeFromList([?ENUM(?E_Cause, Term#'ReleaseType'.cause),
+                        ?ENUM(?E_CauseInitiator, Term#'ReleaseType'.causeInitiator),
+                        ?LIST(Term#'ReleaseType'.causeDescription),
+                        ?LIST(Term#'ReleaseType'.dialledDigits),
+                        ?BINARY(Term#'ReleaseType'.causeIsup),
+                        ?LIST(Term#'ReleaseType'.additionalInfo),
+                        ?RECORD(Term#'ReleaseType'.trunkGroupId),
+                        ?RECORD(Term#'ReleaseType'.refer),
+                        ?BOOL(Term#'ReleaseType'.need_ack),
+                        ?TIME(Term#'ReleaseType'.eventTime)]),
   <<?R_ReleaseType,
-    Cause/binary,
-    CauseInitiator/binary,
-    CauseDescription/binary,
-    Digits/binary,
-    CauseIsup/binary,
-    AdditionalInfo/binary,
-    TrunkGroupId/binary, Sid/binary, Refer/binary, NeedAck/binary, EventTime/binary>>;
+    Bin/binary>>;
 encode_record(#'ReleaseInd'{} = Term) ->
-  ResArg = encode_record(Term#'ReleaseInd'.arg),
+  Bin = encodeFromList([?RECORD(Term#'ReleaseInd'.arg)]),
   <<?R_ReleaseInd,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupInd'{} = Term) ->
-  ResArg = encode_record(Term#'SetupInd'.arg),
+  Bin = encodeFromList([?RECORD(Term#'SetupInd'.arg)]),
   <<?R_SetupInd,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupReq'{} = Term) ->
-  ResArg = encode_record(Term#'SetupReq'.arg),
+  Bin = encodeFromList([?RECORD(Term#'SetupReq'.arg)]),
   <<?R_SetupReq,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupIRType'{} = Term) ->
-  Domain                     = encode_list(Term#'SetupIRType'.domain),
-  CalledPartyNumber          = encode_record(Term#'SetupIRType'.calledPartyNumber),
-  CalledPartysCategory       = encode_enum(?E_CalledPartysCategory,Term#'SetupIRType'.calledPartysCategory),
-  CallingPartyNumber         = encode_record(Term#'SetupIRType'.callingPartyNumber),
-  CallingPartysCategory      = encode_enum(?E_CallingPartysCategory,Term#'SetupIRType'.callingPartysCategory),
-  LocationNumber             = encode_list(Term#'SetupIRType'.locationNumber),
-  OriginalCalledNumber       = encode_record(Term#'SetupIRType'.originalCalledNumber),
-  UserTeleserviceInformation = encode_list(Term#'SetupIRType'.userTeleserviceInformation),
-  GenericNumbers             = encode_list(Term#'SetupIRType'.genericNumber),
-  ForwardCallIndicators      = encode_list(Term#'SetupIRType'.forwardCallIndicators),
-  RedirectingNumber          = encode_record(Term#'SetupIRType'.redirectingNumber),
-  RedirectionInformation     = encode_record(Term#'SetupIRType'.redirectingInformation),
-  USIServiceIndicator        = ?ENCODE_UNKNOWN(Term#'SetupIRType'.uSIServiceIndicator),
-  USIInformation             = encode_list(Term#'SetupIRType'.uSIInformation),
-  ISUPCallReference          = encode_list(Term#'SetupIRType'.isupCallRef),
-  SDPType                    = encode_record(Term#'SetupIRType'.sdp),
-  MediaPoint                 = encode_binary(Term#'SetupIRType'.mediaPoint),
-  AdditionalInfo             = encode_list(Term#'SetupIRType'.additionalInfo),
-  TrunkGroupId               = encode_record(Term#'SetupIRType'.trunkGroupId),
-  CallingPartyInfo           = encode_list(Term#'SetupIRType'.callingPartyInfo),
-  CalledPartyInfo            = encode_list(Term#'SetupIRType'.calledPartyInfo),
-  CallingIfaceInfo           = encode_list(Term#'SetupIRType'.callingIfaceInfo),
-  CalledIfaceInfo            = encode_list(Term#'SetupIRType'.calledIfaceInfo),
-  Refer                      = encode_record(Term#'SetupIRType'.refer),
-  SetupModeType              = encode_enum(?E_SetupModeType,Term#'SetupIRType'.mode),
-  Priority                   = encode_record(Term#'SetupIRType'.priority),
-  EventTime                  = encode_time(Term#'SetupIRType'.eventTime),
+  Bin = encodeFromList([?LIST(Term#'SetupIRType'.domain),
+                        ?RECORD(Term#'SetupIRType'.calledPartyNumber),
+                        ?RECORD(Term#'SetupIRType'.callingPartyNumber),
+                        ?LIST(Term#'SetupIRType'.locationNumber),
+                        ?RECORD(Term#'SetupIRType'.originalCalledNumber),
+                        ?LIST(Term#'SetupIRType'.userTeleserviceInformation),
+                        ?LIST(Term#'SetupIRType'.genericNumber),
+                        ?LIST(Term#'SetupIRType'.forwardCallIndicators),
+                        ?RECORD(Term#'SetupIRType'.redirectingNumber),
+                        ?RECORD(Term#'SetupIRType'.redirectingInformation),
+                        ?UNKNOWN(Term#'SetupIRType'.uSIServiceIndicator),
+                        ?LIST(Term#'SetupIRType'.uSIInformation),
+                        ?LIST(Term#'SetupIRType'.isupCallRef),
+                        ?RECORD(Term#'SetupIRType'.callId),
+                        ?RECORD(Term#'SetupIRType'.sdp),
+                        ?BINARY(Term#'SetupIRType'.mediaPoint),
+                        ?LIST(Term#'SetupIRType'.additionalInfo),
+                        ?RECORD(Term#'SetupIRType'.trunkGroupId),
+                        ?LIST(Term#'SetupIRType'.callingPartyInfo),
+                        ?LIST(Term#'SetupIRType'.calledPartyInfo),
+                        ?LIST(Term#'SetupIRType'.callingIfaceInfo),
+                        ?LIST(Term#'SetupIRType'.calledIfaceInfo),
+                        ?RECORD(Term#'SetupIRType'.refer),
+                        ?ENUM(?E_SetupModeType,Term#'SetupIRType'.mode),
+                        ?RECORD(Term#'SetupIRType'.priority),
+                        ?TIME(Term#'SetupIRType'.eventTime)]),
   <<?R_SetupIRType,
-    Domain/binary,
-    CalledPartyNumber/binary,
-    CalledPartysCategory/binary,
-    CallingPartyNumber/binary,
-    CallingPartysCategory/binary,
-    LocationNumber/binary,
-    OriginalCalledNumber/binary,
-    UserTeleserviceInformation/binary,
-    GenericNumbers/binary,
-    ForwardCallIndicators/binary,
-    RedirectingNumber/binary,
-    RedirectionInformation/binary,
-    USIServiceIndicator/binary,
-    USIInformation/binary,
-    ISUPCallReference/binary,
-    SDPType/binary,
-    MediaPoint/binary,
-    AdditionalInfo/binary,
-    TrunkGroupId/binary,
-    CallingPartyInfo/binary,
-    CalledPartyInfo/binary,
-    CallingIfaceInfo/binary,
-    CalledIfaceInfo/binary,
-    Refer/binary,
-    SetupModeType/binary,
-    Priority/binary,
-    EventTime/binary>>;
+    Bin/binary>>;
+encode_record(#'LocationNumber'{} = Term) ->
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'LocationNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'LocationNumber'.ni),
+                        ?BOOL(Term#'LocationNumber'.incomplete),
+                        ?ENUM(?E_NPIType,Term#'LocationNumber'.npi),
+                        ?ENUM(?E_APRIType,Term#'LocationNumber'.apri),
+                        ?ENUM(?E_ScreeningType,Term#'LocationNumber'.screening),
+                        ?ENUM(?E_CallingPartysCategory,Term#'LocationNumber'.category),
+                        ?LIST(Term#'LocationNumber'.digits),
+                        ?LIST(Term#'LocationNumber'.displayName),
+                        ?LIST(Term#'LocationNumber'.callerId),
+                        ?LIST(Term#'LocationNumber'.sipUri),
+                        ?LIST(Term#'LocationNumber'.vdn)]),
+  <<?R_LocationNumber,
+    Bin/binary>>;
 encode_record(#'CalledPartyNumber'{} = Term) ->
-  Nai         = encode_enum(?E_NAIType, Term#'CalledPartyNumber'.nai),
-  Ni          = encode_enum(?E_NIType, Term#'CalledPartyNumber'.ni),
-  Incomplete  = ?ENCODE_BOOL(Term#'CalledPartyNumber'.incomplete),
-  Inni        = encode_enum(?E_INNIType, Term#'CalledPartyNumber'.inni),
-  Npi         = encode_enum(?E_NPIType,Term#'CalledPartyNumber'.npi),
-  Digits      = encode_list(Term#'CalledPartyNumber'.digits),
-  DisplayName = encode_list(Term#'CalledPartyNumber'.displayName),
-  SipUri      = encode_list(Term#'CalledPartyNumber'.sipUri),
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'CalledPartyNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'CalledPartyNumber'.ni),
+                        ?BOOL(Term#'CalledPartyNumber'.incomplete),
+                        ?ENUM(?E_INNIType, Term#'CalledPartyNumber'.inni),
+                        ?ENUM(?E_NPIType,Term#'CalledPartyNumber'.npi),
+                        ?ENUM(?E_CalledPartysCategory,Term#'CalledPartyNumber'.category),
+                        ?LIST(Term#'CalledPartyNumber'.digits),
+                        ?LIST(Term#'CalledPartyNumber'.displayName),
+                        ?LIST(Term#'CalledPartyNumber'.sipUri),
+                        ?LIST(Term#'CalledPartyNumber'.vdn)]),
   <<?R_CalledPartyNumber,
-    Nai/binary,
-    Ni/binary,
-    Incomplete/binary,
-    Inni/binary,
-    Npi/binary,
-    Digits/binary,
-    DisplayName/binary,
-    SipUri/binary>>;
+    Bin/binary>>;
 encode_record(#'CallingPartyNumber'{} = Term) ->
-  Nai         = encode_enum(?E_NAIType, Term#'CallingPartyNumber'.nai),
-  Ni          = encode_enum(?E_NIType, Term#'CallingPartyNumber'.ni),
-  Incomplete  = ?ENCODE_BOOL(Term#'CallingPartyNumber'.incomplete),
-  Npi         = encode_enum(?E_NPIType,Term#'CallingPartyNumber'.npi),
-  Apri        = encode_enum(?E_APRIType,Term#'CallingPartyNumber'.apri),
-  Screening   = encode_enum(?E_ScreeningType,Term#'CallingPartyNumber'.screening),
-  Digits      = encode_list(Term#'CallingPartyNumber'.digits),
-  DisplayName = encode_list(Term#'CallingPartyNumber'.displayName),
-  CallerId    = encode_list(Term#'CallingPartyNumber'.callerId),
-  SipUri      = encode_list(Term#'CallingPartyNumber'.sipUri),
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'CallingPartyNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'CallingPartyNumber'.ni),
+                        ?BOOL(Term#'CallingPartyNumber'.incomplete),
+                        ?ENUM(?E_NPIType,Term#'CallingPartyNumber'.npi),
+                        ?ENUM(?E_APRIType,Term#'CallingPartyNumber'.apri),
+                        ?ENUM(?E_ScreeningType,Term#'CallingPartyNumber'.screening),
+                        ?ENUM(?E_CallingPartysCategory,Term#'CallingPartyNumber'.category),
+                        ?LIST(Term#'CallingPartyNumber'.digits),
+                        ?RECORD(Term#'CallingPartyNumber'.callerDisplayInformation),
+                        ?LIST(Term#'CallingPartyNumber'.sipUri),
+                        ?LIST(Term#'CallingPartyNumber'.vdn)]),
   <<?R_CallingPartyNumber,
-    Nai/binary,
-    Ni/binary,
-    Incomplete/binary,
-    Npi/binary,
-    Apri/binary,
-    Screening/binary,
-    Digits/binary,
-    DisplayName/binary,
-    CallerId/binary,
-    SipUri/binary>>;
+    Bin/binary>>;
+encode_record(#'CallerDisplayInformation'{} = Term) ->
+  Bin = encodeFromList([?BOOL(Term#'CallerDisplayInformation'.showDisplayName),
+                        ?LIST(Term#'CallerDisplayInformation'.displayName),
+                        ?BOOL(Term#'CallerDisplayInformation'.showCallerId),
+                        ?LIST(Term#'CallerDisplayInformation'.callerId)]),
+  <<?R_CallerDisplayInformation,
+    Bin/binary>>;
 encode_record(#'SetupCRType'{} = Term) ->
-  ConnectedNumber    = encode_record(Term#'SetupCRType'.connectedNumber),
-  AdditionalInfo     = encode_list(Term#'SetupCRType'.additionalInfo),
-  RedirectionNumber  = encode_record(Term#'SetupCRType'.redirectionNumber),
-  RedirectionRestInd = encode_enum(?E_RedirectionRestrictionIndicator, Term#'SetupCRType'.redirectionRestInd),
-  Sdp                = encode_record(Term#'SetupCRType'.sdp),
-  ObsoleteMediaPoint = encode_binary(Term#'SetupCRType'.obsoleteMediaPoint),
-  Refer              = encode_record(Term#'SetupCRType'.refer),
-  EventTime          = encode_time(Term#'SetupCRType'.eventTime),
+  Bin = encodeFromList([?RECORD(Term#'SetupCRType'.connectedNumber),
+                        ?LIST(Term#'SetupCRType'.additionalInfo),
+                        ?RECORD(Term#'SetupCRType'.redirectionNumber),
+                        ?ENUM(?E_RedirectionRestrictionIndicator, Term#'SetupCRType'.redirectionRestInd),
+                        ?RECORD(Term#'SetupCRType'.callId),
+                        ?RECORD(Term#'SetupCRType'.sdp),
+                        ?BINARY(Term#'SetupCRType'.obsoleteMediaPoint),
+                        ?RECORD(Term#'SetupCRType'.refer),
+                        ?TIME(Term#'SetupCRType'.eventTime)]),
   <<?R_SetupCRType,
-    ConnectedNumber/binary,
-    AdditionalInfo/binary,
-    RedirectionNumber/binary,
-    RedirectionRestInd/binary,
-    Sdp/binary,
-    ObsoleteMediaPoint/binary,
-    Refer/binary,
-    EventTime/binary>>;
+    Bin/binary>>;
 encode_record(#'MLPPPrecedence'{} = Term) ->
-  Lfb               = encode_integer(Term#'MLPPPrecedence'.lfb),
-  PrecedenceLevel   = encode_integer(Term#'MLPPPrecedence'.precedenceLevel),
-  NetworkIdentity   = encode_integer(Term#'MLPPPrecedence'.network_identity),
-  MlppServiceDomain = encode_integer(Term#'MLPPPrecedence'.mlpp_service_domain),
+  Bin = encodeFromList([?INTEGER(Term#'MLPPPrecedence'.lfb),
+                        ?INTEGER(Term#'MLPPPrecedence'.precedenceLevel),
+                        ?INTEGER(Term#'MLPPPrecedence'.network_identity),
+                        ?INTEGER(Term#'MLPPPrecedence'.mlpp_service_domain)]),
   <<?R_MLPPPrecedence,
-    Lfb/binary,
-    PrecedenceLevel/binary,
-    NetworkIdentity/binary,
-    MlppServiceDomain/binary>>;
+    Bin/binary>>;
 encode_record(#'OriginalCalledNumber'{} = Term) ->
-  Nai         = encode_enum(?E_NAIType, Term#'OriginalCalledNumber'.nai),
-  Ni          = encode_enum(?E_NIType, Term#'OriginalCalledNumber'.ni),
-  Incomplete  = ?ENCODE_BOOL(Term#'OriginalCalledNumber'.incomplete),
-  Npi         = encode_enum(?E_NPIType,Term#'OriginalCalledNumber'.npi),
-  Apri        = encode_enum(?E_APRIType,Term#'OriginalCalledNumber'.apri),
-  Digits      = encode_list(Term#'OriginalCalledNumber'.digits),
-  DisplayName = encode_list(Term#'OriginalCalledNumber'.displayName),
-  SipUri      = encode_list(Term#'OriginalCalledNumber'.sipUri),
+  Bin = encodeFromList([?ENUM(?E_NAIType, Term#'OriginalCalledNumber'.nai),
+                        ?ENUM(?E_NIType, Term#'OriginalCalledNumber'.ni),
+                        ?BOOL(Term#'OriginalCalledNumber'.incomplete),
+                        ?ENUM(?E_NPIType,Term#'OriginalCalledNumber'.npi),
+                        ?ENUM(?E_APRIType,Term#'OriginalCalledNumber'.apri),
+                        ?ENUM(?E_CallingPartysCategory,Term#'OriginalCalledNumber'.category),
+                        ?LIST(Term#'OriginalCalledNumber'.digits),
+                        ?LIST(Term#'OriginalCalledNumber'.displayName),
+                        ?LIST(Term#'OriginalCalledNumber'.sipUri),
+                        ?LIST(Term#'OriginalCalledNumber'.vdn)]),
   <<?R_OriginalCalledNumber,
-    Nai/binary,
-    Ni/binary,
-    Incomplete/binary,
-    Npi/binary,
-    Apri/binary,
-    Digits/binary,
-    DisplayName/binary,
-    SipUri/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupResp'{} = Term) ->
-  ResArg = encode_record(Term#'SetupResp'.arg),
+  Bin = encodeFromList([?RECORD(Term#'SetupResp'.arg)]),
   <<?R_SetupResp,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'SetupConf'{} = Term) ->
-  ResArg = encode_record(Term#'SetupConf'.arg),
+  Bin = encodeFromList([?RECORD(Term#'SetupConf'.arg)]),
   <<?R_SetupConf,
-    ResArg/binary>>;
+    Bin/binary>>;
 encode_record(#'RedirectionInformation'{} = Term) ->
-  OriginalRedirectionReason = encode_enum(?E_OriginalRedirectionReason,Term#'RedirectionInformation'.originalRedirectionReason),
-  RedirectingIndicator = encode_enum(?E_OriginalRedirectionReason,Term#'RedirectionInformation'.originalRedirectionReason),
-  RedirectingReason = encode_enum(?E_RedirectingReasonInfo,Term#'RedirectionInformation'.redirectingReason),
-  RedirectionCounter = encode_enum(?E_RedirectionCounter,Term#'RedirectionInformation'.redirectionCounter),
+  Bin = encodeFromList([?ENUM(?E_OriginalRedirectionReason,Term#'RedirectionInformation'.originalRedirectionReason),
+                        ?ENUM(?E_OriginalRedirectionReason,Term#'RedirectionInformation'.originalRedirectionReason),
+                        ?ENUM(?E_RedirectingReasonInfo,Term#'RedirectionInformation'.redirectingReason),
+                        ?ENUM(?E_RedirectionCounter,Term#'RedirectionInformation'.redirectionCounter)]),
   <<?R_RedirectionInformation,
-    OriginalRedirectionReason/binary,
-    RedirectingIndicator/binary,
-    RedirectingReason/binary,
-    RedirectionCounter/binary>>;
+    Bin/binary>>;
+encode_record(#'CallId'{} = Term) ->
+  Bin = encodeFromList([?BINARY(Term#'CallId'.id),
+                        ?BINARY(Term#'CallId'.fromTag),
+                        ?BINARY(Term#'CallId'.toTag)]),
+  <<?R_CallId,
+    Bin/binary>>;
 encode_record(undefined) -> ?Z_Undefined;
 encode_record(Pack) -> writeToError(["Unknown Pack",Pack]), ?ENCODE_UNKNOWN(Pack).
 
@@ -1035,99 +994,155 @@ encode_value(Value) ->
 
 
 %%%%%% Decode
+-define(WIRESHARK, 0). % 1 - включено, 0 - выключено
+
 decode(Pack) ->
-  log:debug("decode args: ~p", [Pack]),
-  TimeStart = erlang:monotonic_time(micro_seconds),
-  try decode_record(Pack) of
-    Packet ->
-      case Packet of
-        {Result, <<>>} ->
-        writeToLogs(TimeStart, Pack, Result, decode),
-        Result;
-      _ ->
-        erlang:throw({decode_error, Pack})
-      end
-    catch
-      _:_ ->
-        log:error("decode error for ~p",[Pack]),
-        erlang:throw({decode_error, Pack})
-    end.
+  case ?WIRESHARK of
+      1 ->
+        try decode_record(Pack) of
+          Packet ->
+            case Packet of
+              {Fields, Result, Commit, _Bin} ->
+                {erlang:length(Fields), Fields, Result, Commit};
+              _ ->
+                Packet
+            end
+        catch
+          _:_ ->
+            log:error("decode error for ~p",[Pack])
+        end;
+      0 ->
+        log:debug("decode args: ~p", [Pack]),
+        TimeStart = erlang:monotonic_time(micro_seconds),
+        try decode_record(Pack) of
+          Packet ->
+            case Packet of
+              {Result, Commit, _Bin} ->
+                writeToLogs(TimeStart, Pack, Result, decode),
+                {Result, Commit};
+            _ ->
+              erlang:throw({decode_error, Pack})
+            end
+        catch
+          _:_ ->
+            log:error("decode error for ~p",[Pack])
+        end
+  end.
 
+decodeFromList([binary | T], Bin) ->
+  {Binary, Bin1} = decode_binary(Bin),
+  [Binary] ++ decodeFromList(T, Bin1);
+decodeFromList([integer | T], Bin) ->
+  {Integer, Bin1} = decode_integer(Bin),
+  [Integer] ++ decodeFromList(T, Bin1);
+decodeFromList([record | T], Bin) ->
+  case ?WIRESHARK of
+    1 ->
+      {Record, Bin1, Fields} = decode_record(Bin),
+      [{erlang:length(Fields), Fields, Record}] ++ decodeFromList(T, Bin1);
+    _ ->
+      {Record, Bin1, _} = decode_record(Bin),
+      [Record] ++ decodeFromList(T, Bin1)
+  end;
+decodeFromList([enum | T], Bin) ->
+  {Enum, Bin1} = decode_enum(Bin),
+  [Enum] ++ decodeFromList(T, Bin1);
+decodeFromList([list | T], Bin) ->
+  {List, Bin1} = decode_list(Bin),
+  [List] ++ decodeFromList(T, Bin1);
+decodeFromList([bool | T], Bin) ->
+  {Bool, Bin1} = decode_bool(Bin),
+  [Bool] ++ decodeFromList(T, Bin1);
+decodeFromList([time | T], Bin) ->
+  {Time, Bin1} = decode_time(Bin),
+  [Time] ++ decodeFromList(T, Bin1);
+ decodeFromList([unknown | T], Bin) ->
+  {Unknown, Bin1} = decode_unknown(Bin),
+  [Unknown] ++ decodeFromList(T, Bin1);
+decodeFromList([], <<>>) -> [<<>>];
+decodeFromList([], Bin) -> [Bin].
 
-decode_record(?DECODE_UNDEFINED) -> {undefined, _Bin};
+decode_record(?DECODE_UNDEFINED) -> {undefined, _Bin, []};
 decode_record(<<?UNKNOWN, _/binary>> = Term) -> decode_unknown(Term);
-decode_record(<<?R_AcpMessage, Bin0/binary>>) ->
-  {Uri, Bin1}     = decode_binary(Bin0),
-  {CallRef, Bin2} = decode_integer(Bin1),
-  {Body, Bin3}    = decode_record(Bin2),
-  {#'AcpMessage'{
-    uri     = Uri,
-    callRef = CallRef,
-    body    = Body
-  }, Bin3};
+decode_record(<<?R_AcpMessage, ?T_String, Bin/binary>>) ->
+  [Commit, Uri, CallRef, Body, Bin1] = decodeFromList([list, binary, integer, record], Bin),
+  case ?WIRESHARK of
+    1 -> {record_info(fields, 'AcpMessage'),
+           #'AcpMessage'{
+             uri     = Uri,
+             callRef = CallRef,
+             body    = Body
+           }, Commit, Bin1};
+    0 -> {#'AcpMessage'{
+             uri     = Uri,
+             callRef = CallRef,
+             body    = Body
+           }, Commit, Bin1}
+  end;
+decode_record(<<?R_AcpMessage, Bin/binary>>) ->
+  [Uri, CallRef, Body, Bin1] = decodeFromList([binary, integer, record], Bin),
+  case ?WIRESHARK of
+    1 -> {record_info(fields, 'AcpMessage'),
+         #'AcpMessage'{
+           uri     = Uri,
+           callRef = CallRef,
+           body    = Body
+         }, undefined, Bin1};
+    0 -> {#'AcpMessage'{
+           uri     = Uri,
+           callRef = CallRef,
+           body    = Body
+         }, undefined, Bin1}
+  end;
 decode_record(<<?R_ServiceFeatureInd, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record], Bin),
   {#'ServiceFeatureInd'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'ServiceFeatureInd')};
 decode_record(<<?R_ServiceFeatureType, Bin/binary>>) ->
-  {Cause, Bin0}   = decode_enum(Bin),
-  {AddInfo, Bin1} = decode_list(Bin0),
+  [Cause, AddInfo, Bin1] = decodeFromList([enum, list], Bin),
   {#'ServiceFeatureType'{
     cause          = Cause,
     additionalInfo = AddInfo
-  }, Bin1};
+  }, Bin1, record_info(fields, 'ServiceFeatureType')};
 decode_record(<<?R_SetupReqAck, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record], Bin),
   {#'SetupReqAck'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'SetupReqAck')};
 decode_record(<<?R_SetupIndAck, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record],Bin),
   {#'SetupIndAck'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'SetupIndAck')};
 decode_record(<<?R_SetupReq, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record], Bin),
   {#'SetupReq'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'SetupReq')};
 decode_record(<<?R_SetupAckType, Bin/binary>>) ->
-  {Refer, Bin1}        = decode_record(Bin),
-  {TrunkGroupId, Bin2} = decode_record(Bin1),
+  [Refer, TrunkGroupId, Bin1] = decodeFromList([record, record], Bin),
   {#'SetupAckType'{
     refer        = Refer,
     trunkGroupId = TrunkGroupId
-  }, Bin2};
+  }, Bin1, record_info(fields, 'SetupAckType')};
 decode_record(<<?R_CallProgressReq, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record], Bin),
   {#'CallProgressReq'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'CallProgressReq')};
 decode_record(<<?R_CallProgressInd, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record], Bin),
   {#'CallProgressInd'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'CallProgressInd')};
 decode_record(<<?R_CallProgressType, Bin/binary>>) ->
-  {Cause, Bin1}               = decode_enum(Bin),
-  {CauseInitiator, Bin2}      = decode_enum(Bin1),
-  {CauseDescription, Bin3}    = decode_list(Bin2),
-  {CauseIsup, Bin4}           = decode_binary(Bin3),
-  {EventInformation, Bin5}    = decode_record(Bin4),
-  {AdditionalInfo, Bin6}      = decode_list(Bin5),
-  {OBCI, Bin7}                = decode_record(Bin6),
-  {GNotification, Bin8}       = decode_list(Bin7),
-  {RedirectionNumber, Bin9}   = decode_record(Bin8),
-  {RedirectionResInd, Bin10}  = decode_enum(Bin9),
-  {CallDiversionInfo, Bin11}  = decode_record(Bin10),
-  {Facility, Bin12}           = decode_list(Bin11),
-  {SDP, Bin13}                = decode_record(Bin12),
-  {MediaPoint, Bin14}         = decode_binary(Bin13),
-  {TrunkGroupId, Bin15}       = decode_record(Bin14),
-  {CallTransferNumber, Bin16} = decode_record(Bin15),
-  {Refer, Bin17}              = decode_record(Bin16),
-  {EventTime, Bin18}          = decode_time(Bin17),
+  [Cause, CauseInitiator, CauseDescription, CauseIsup, EventInformation, AdditionalInfo,
+    OBCI, GNotification, RedirectionNumber, RedirectionResInd, CallDiversionInfo,
+    Facility, CallId, SDP, MediaPoint, TrunkGroupId, CallTransferNumber, Refer,
+    EventTime, Bin1] = decodeFromList([enum, enum, list, binary, record, list, record,
+    list, record, enum, record, list, record, record, binary, record, record, record,
+    time], Bin),
   {#'CallProgressType'{
     cause              = Cause,
     causeInitiator     = CauseInitiator,
@@ -1141,79 +1156,69 @@ decode_record(<<?R_CallProgressType, Bin/binary>>) ->
     redirectionRestInd = RedirectionResInd,
     callDiversionInfo  = CallDiversionInfo,
     facility           = Facility,
+    callId             = CallId,
     sdp                = SDP,
     mediaPoint         = MediaPoint,
     trunkGroupId       = TrunkGroupId,
     callTransferNumber = CallTransferNumber,
     refer              = Refer,
     eventTime          = EventTime
-  }, Bin18};
+  }, Bin1, record_info(fields, 'CallProgressType')};
 decode_record(<<?R_EventInformation, Bin/binary>>) ->
-  {EvInd, Bin1}   = decode_enum(Bin),
-  {EvPrInd, Bin2} = decode_enum(Bin1),
+  [EvInd, EvPrInd, Bin1] = decodeFromList([enum, enum], Bin),
   {#'EventInformation'{
     eventIndicator             = EvInd,
     eventPresentationIndicator = EvPrInd
-  }, Bin2};
+  }, Bin1, record_info(fields, 'EventInformation')};
 decode_record(<<?R_OptionalBackwardCallIndicators, Bin/binary>>) ->
-  {InbII, Bin1}                 = decode_enum(Bin),
-  {CallDiversionInd, Bin2}      = decode_enum(Bin1),
-  {SimpleSegmentationInf, Bin3} = decode_enum(Bin2),
-  {MlppUserInd, Bin4}           = decode_enum(Bin3),
+  [InbII, CallDiversionInd, SimpleSegmentationInf, MlppUserInd, Bin1] =
+  decodeFromList([enum, enum, enum, enum], Bin),
   {#'OptionalBackwardCallIndicators'{
     inbInfoInd            = InbII,
     callDiversionInd      = CallDiversionInd,
     simpleSegmentationInf = SimpleSegmentationInf,
     mlppUserInd           = MlppUserInd
-  }, Bin4};
+  }, Bin1, record_info(fields, 'OptionalBackwardCallIndicators')};
 decode_record(<<?R_RedirectingNumber, Bin/binary>>) ->
-  {Nai, Bin1}        = decode_enum(Bin),
-  {Ni, Bin2}         = decode_enum(Bin1),
-  {Incomplete, Bin3} = decode_bool(Bin2),
-  {Npi, Bin4}        = decode_enum(Bin3),
-  {Apri, Bin5}       = decode_enum(Bin4),
-  {Digits, Bin6}     = decode_list(Bin5),
+  [Nai, Ni, Incomplete, Npi, Apri, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
+  decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'RedirectingNumber'{
     nai        = Nai,
     ni         = Ni,
     incomplete = Incomplete,
     npi        = Npi,
     apri       = Apri,
-    digits     = Digits
-  },Bin6};
+    category   = Category,
+    digits     = Digits,
+    displayName= DisplayName,
+    sipUri     = SipUri,
+    vdn        = VDN
+  },Bin1, record_info(fields, 'RedirectingNumber')};
 decode_record(<<?R_CallDiversionInformation, Bin/binary>>) ->
-  {NotifSubsOpts, Bin1}      = decode_enum(Bin),
-  {RedirectingReason, Bin2}  = decode_enum(Bin1),
+  [NotifSubsOpts, RedirectingReason, Bin1] = decodeFromList([enum, enum], Bin),
   {#'CallDiversionInformation'{
     notificationSubsOpts = NotifSubsOpts,
     redirectingReason    = RedirectingReason
-  }, Bin2};
+  }, Bin1, record_info(fields, 'CallDiversionInformation')};
 decode_record(<<?R_SDPType, Bin/binary>>) ->
-  {Type, Bin1} = decode_enum(Bin),
-  {Body, Bin2} = decode_list(Bin1),
+  [Type, Body, Bin1] = decodeFromList([enum, list], Bin),
   {#'SDPType'{
     type = Type,
     body = Body
-  }, Bin2};
+  }, Bin1, record_info(fields, 'SDPType')};
 decode_record(<<?R_TrunkGroupId, Bin/binary>>) ->
-  {TrunkGroupId, Bin1}  = decode_list(Bin),
-  {TrunkId, Bin2}       = decode_list(Bin1),
-  {PCMId, Bin3}         = decode_list(Bin2),
-  {ChannelNumber, Bin4} = decode_integer(Bin3),
+  [TrunkGroupId, TrunkId, PCMId, ChannelNumber, Bin1] = decodeFromList([list,
+    list, list, integer], Bin),
   {#'TrunkGroupId'{
     trunkGroupId  = TrunkGroupId,
     trunkId       = TrunkId,
     pCMId         = PCMId,
     channelNumber = ChannelNumber
-  }, Bin4};
+  }, Bin1, record_info(fields, 'TrunkGroupId')};
 decode_record(<<?R_CallTransferNumber, Bin/binary>>) ->
-  {Nai, Bin1}        = decode_enum(Bin),
-  {Ni, Bin2}         = decode_enum(Bin1),
-  {Incomplete, Bin3} = decode_bool(Bin2),
-  {Npi, Bin4}        = decode_enum(Bin3),
-  {Apri, Bin5}       = decode_enum(Bin4),
-  {Screening, Bin6}  = decode_enum(Bin5),
-  {Digits, Bin7}     = decode_list(Bin6),
+  [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Digits, DisplayName, SipUri,
+    VDN, Bin1] = decodeFromList([enum, enum, bool, enum, enum, enum, enum, list, list,
+    list, list], Bin),
   {#'CallTransferNumber'{
     nai        = Nai,
     ni         = Ni,
@@ -1221,60 +1226,49 @@ decode_record(<<?R_CallTransferNumber, Bin/binary>>) ->
     npi        = Npi,
     apri       = Apri,
     screening  = Screening,
-    digits     = Digits
-  }, Bin7};
+    category   = Category,
+    digits     = Digits,
+    displayName= DisplayName,
+    sipUri     = SipUri,
+    vdn        = VDN
+  }, Bin1, record_info(fields, 'CallTransferNumber')};
 decode_record(<<?R_Refer, Bin/binary>>) ->
-  {List, Bin1} = decode_list(Bin),
-  {{refer, List}, Bin1};
+  [List, Bin1] = decodeFromList([list],Bin),
+  {{refer, List}, Bin1, [refer]};
 decode_record(<<?R_ReferType, Bin/binary>>) ->
-  {Exchange, Bin1}   = decode_list(Bin),
-  {RoutingKey, Bin2} = decode_list(Bin1),
-  {Sid, Bin3}        = decode_binary(Bin2),
-  {CallRef, Bin4}    = decode_integer(Bin3),
-  {ConfId, Bin5}     = decode_list(Bin4),
+  [Exchange, RoutingKey, Sid, CallRef, ConfId, Bin1] = decodeFromList([list, list, binary,
+    integer, list], Bin),
   {#'ReferType'{
     exchange   = Exchange,
     routingKey = RoutingKey,
     sid        = Sid,
     callRef    = CallRef,
     conf_id    = ConfId
-  },Bin5};
+  }, Bin1, record_info(fields, 'ReferType')};
 decode_record(<<?R_RedirectionNumber, Bin/binary>>) ->
-  {Nai, Bin1}         = decode_enum(Bin),
-  {Ni, Bin2}          = decode_enum(Bin1),
-  {Incomplete, Bin3}  = decode_bool(Bin2),
-  {Inni, Bin4}        = decode_enum(Bin3),
-  {Npi, Bin5}         = decode_enum(Bin4),
-  {Digits, Bin6}      = decode_list(Bin5),
-  {DisplayName, Bin7} = decode_list(Bin6),
-  {SipUri, Bin8}      = decode_list(Bin7),
+  [Nai, Ni, Incomplete, Inni, Npi, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
+    decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'RedirectionNumber'{
     nai         = Nai,
     ni          = Ni,
     incomplete  = Incomplete,
     inni        = Inni,
     npi         = Npi,
+    category    = Category,
     digits      = Digits,
     displayName = DisplayName,
-    sipUri      = SipUri
-  }, Bin8};
+    sipUri      = SipUri,
+    vdn         = VDN
+  }, Bin1, record_info(fields, 'RedirectionNumber')};
 decode_record(<<?R_ReleaseReq, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record], Bin),
   {#'ReleaseReq'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'ReleaseReq')};
 decode_record(<<?R_ReleaseType, Bin/binary>>) ->
-  {Cause, Bin1}            = decode_enum(Bin),
-  {CauseInitiator, Bin2}   = decode_enum(Bin1),
-  {CauseDescription, Bin3} = decode_list(Bin2),
-  {Digits, Bin4}           = decode_list(Bin3),
-  {CauseIsup, Bin5}        = decode_binary(Bin4),
-  {AdditionalInfo, Bin6}   = decode_list(Bin5),
-  {TrunkGroupId, Bin7}     = decode_record(Bin6),
-  {Sid, Bin8}              = decode_binary(Bin7),
-  {Refer, Bin9}            = decode_record(Bin8),
-  {NeedAck, Bin10}         = decode_bool(Bin9),
-  {EventTime, Bin11}       = decode_time(Bin10),
+  [Cause, CauseInitiator, CauseDescription, Digits, CauseIsup, AdditionalInfo,
+    TrunkGroupId, Refer, NeedAck, EventTime, Bin1] = decodeFromList([enum, enum,
+    list, list, binary, list, record, record, bool, time], Bin),
   {#'ReleaseType'{
     cause            = Cause,
     causeInitiator   = CauseInitiator,
@@ -1283,46 +1277,33 @@ decode_record(<<?R_ReleaseType, Bin/binary>>) ->
     causeIsup        = CauseIsup,
     additionalInfo   = AdditionalInfo,
     trunkGroupId     = TrunkGroupId,
-    sid              = Sid,
     refer            = Refer,
     need_ack         = NeedAck,
     eventTime        = EventTime
-  }, Bin11};
+  }, Bin1, record_info(fields, 'ReleaseType')};
 decode_record(<<?R_ReleaseInd, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record],Bin),
   {#'ReleaseInd'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'ReleaseInd')};
 decode_record(<<?R_CalledPartyNumber, Bin/binary>>) ->
-  {Nai, Bin1}         = decode_enum(Bin),
-  {Ni, Bin2}          = decode_enum(Bin1),
-  {Incomplete, Bin3}  = decode_bool(Bin2),
-  {Inni, Bin4}        = decode_enum(Bin3),
-  {Npi, Bin5}         = decode_enum(Bin4),
-  {Digits, Bin6}      = decode_list(Bin5),
-  {DisplayName, Bin7} = decode_list(Bin6),
-  {SipUri, Bin8}      = decode_list(Bin7),
+  [Nai, Ni, Incomplete, Inni, Npi, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
+    decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'CalledPartyNumber'{
     nai         = Nai,
     ni          = Ni,
     incomplete  = Incomplete,
     inni        = Inni,
     npi         = Npi,
+    category    = Category,
     digits      = Digits,
     displayName = DisplayName,
-    sipUri      = SipUri
-  }, Bin8};
+    sipUri      = SipUri,
+    vdn         = VDN
+  }, Bin1, record_info(fields, 'CalledPartyNumber')};
 decode_record(<<?R_CallingPartyNumber, Bin/binary>>) ->
-  {Nai, Bin1}         = decode_enum(Bin),
-  {Ni, Bin2}          = decode_enum(Bin1),
-  {Incomplete, Bin3}  = decode_bool(Bin2),
-  {Npi, Bin4}         = decode_enum(Bin3),
-  {Apri, Bin5}        = decode_enum(Bin4),
-  {Screening, Bin6}   = decode_enum(Bin5),
-  {Digits, Bin7}      = decode_list(Bin6),
-  {DisplayName, Bin8} = decode_list(Bin7),
-  {CallerId, Bin9}    = decode_list(Bin8),
-  {SipUri, Bin10}     = decode_list(Bin9),
+  [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Digits, CRDI, SipUri, VDN, Bin1] =
+    decodeFromList([enum, enum, bool, enum, enum, enum, enum, list, record, list, list], Bin),
   {#'CallingPartyNumber'{
     nai         = Nai,
     ni          = Ni,
@@ -1330,120 +1311,122 @@ decode_record(<<?R_CallingPartyNumber, Bin/binary>>) ->
     npi         = Npi,
     apri        = Apri,
     screening   = Screening,
+    category    = Category,
     digits      = Digits,
+    callerDisplayInformation = CRDI,
+    sipUri      = SipUri,
+    vdn         = VDN
+  }, Bin1, record_info(fields, 'CallingPartyNumber')};
+decode_record(<<?R_CallerDisplayInformation, Bin/binary>>) ->
+  [ShowDisplayName, DisplayName, ShowCallerId, CallerId, Bin1] = decodeFromList([enum,
+    list, bool, list], Bin),
+  {#'CallerDisplayInformation'{
+    showDisplayName = ShowDisplayName,
     displayName = DisplayName,
-    callerId    = CallerId,
-    sipUri      = SipUri
-  }, Bin10};
+    showCallerId = ShowCallerId,
+    callerId = CallerId
+  }, Bin1, record_info(fields, 'CallerDisplayInformation')};
 decode_record(<<?R_SetupResp, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record],Bin),
   {#'SetupResp'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'SetupResp')};
 decode_record(<<?R_SetupCRType, Bin/binary>>) ->
-  {ConnectedNumber, Bin1}    = decode_record(Bin),
-  {AdditionalInfo, Bin2}     = decode_list(Bin1),
-  {RedirectionNumber, Bin3}  = decode_record(Bin2),
-  {RedirectionRestInd, Bin4} = decode_enum(Bin3),
-  {Sdp, Bin5}                = decode_record(Bin4),
-  {ObsoleteMediaPoint, Bin6} = decode_binary(Bin5),
-  {Refer, Bin7}              = decode_record(Bin6),
-  {EventTime, Bin8}          = decode_time(Bin7),
+  [ConnectedNumber, AdditionalInfo, RedirectionNumber, RedirectionRestInd, CallId, Sdp,
+    ObsoleteMediaPoint, Refer, EventTime, Bin1] = decodeFromList([record, list, record,
+    enum, record, record, binary, record, time], Bin),
   {#'SetupCRType'{
     connectedNumber    = ConnectedNumber,
     additionalInfo     = AdditionalInfo,
     redirectionNumber  = RedirectionNumber,
     redirectionRestInd = RedirectionRestInd,
+    callId             = CallId,
     sdp                = Sdp,
     obsoleteMediaPoint = ObsoleteMediaPoint,
     refer              = Refer,
     eventTime          = EventTime
-  }, Bin8};
+  }, Bin1, record_info(fields, 'SetupCRType')};
 decode_record(<<?R_OriginalCalledNumber, Bin/binary>>) ->
-  {Nai, Bin1}         = decode_enum(Bin),
-  {Ni, Bin2}          = decode_enum(Bin1),
-  {Incomplete, Bin3}  = decode_bool(Bin2),
-  {Npi, Bin4}         = decode_enum(Bin3),
-  {Apri, Bin5}        = decode_enum(Bin4),
-  {Digits, Bin6}      = decode_list(Bin5),
-  {DisplayName, Bin7} = decode_list(Bin6),
-  {SipUri, Bin8}      = decode_list(Bin7),
+  [Nai, Ni, Incomplete, Npi, Apri, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
+    decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'OriginalCalledNumber'{
     nai         = Nai,
     ni          = Ni,
     incomplete  = Incomplete,
     npi         = Npi,
     apri        = Apri,
+    category    = Category,
     digits      = Digits,
     displayName = DisplayName,
-    sipUri      = SipUri
-  }, Bin8};
+    sipUri      = SipUri,
+    vdn         = VDN
+  }, Bin1, record_info(fields, 'OriginalCalledNumber')};
 decode_record(<<?R_RedirectionInformation, Bin/binary>>) ->
-  {OriginalRedirectionReason, Bin1} = decode_enum(Bin),
-  {RedirectingIndicator, Bin2} = decode_enum(Bin1),
-  {RedirectingReason, Bin3} = decode_enum(Bin2),
-  {RedirectionCounter, Bin4} = decode_enum(Bin3),
+  [OriginalRedirectionReason, RedirectingIndicator, RedirectingReason, RedirectionCounter,
+    Bin1] = decodeFromList([enum, enum, enum, enum], Bin),
   {#'RedirectionInformation'{
     originalRedirectionReason = OriginalRedirectionReason,
     redirectingIndicator      = RedirectingIndicator,
     redirectingReason         = RedirectingReason,
     redirectionCounter        = RedirectionCounter
-  }, Bin4};
+  }, Bin1, record_info(fields, 'RedirectionInformation')};
 decode_record(<<?R_MLPPPrecedence, Bin/binary>>) ->
-  {Lfb, Bin1}               = decode_integer(Bin),
-  {PrecedenceLevel, Bin2}   = decode_integer(Bin1),
-  {NetworkIdentity, Bin3}   = decode_integer(Bin2),
-  {MlppServiceDomain, Bin4} = decode_integer(Bin3),
+  [Lfb, PrecedenceLevel, NetworkIdentity, MlppServiceDomain, Bin1] = decodeFromList([
+    integer, integer, integer, integer], Bin),
   {#'MLPPPrecedence'{
     lfb                 = Lfb,
     precedenceLevel     = PrecedenceLevel,
     network_identity    = NetworkIdentity,
     mlpp_service_domain = MlppServiceDomain
-  }, Bin4};
+  }, Bin1, record_info(fields, 'MLPPPrecedence')};
 decode_record(<<?R_SetupInd, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record],Bin),
   {#'SetupInd'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'SetupInd')};
 decode_record(<<?R_SetupConf, Bin/binary>>) ->
-  {Arg, Bin1} = decode_record(Bin),
+  [Arg, Bin1] = decodeFromList([record],Bin),
   {#'SetupConf'{
     arg = Arg
-  }, Bin1};
+  }, Bin1, record_info(fields, 'SetupConf')};
+decode_record(<<?R_CallId, Bin/binary>>) ->
+  [Id, FromTag, ToTag, Bin1] = decodeFromList([binary, binary, binary], Bin),
+  {#'CallId'{
+    id = Id,
+    fromTag = FromTag,
+    toTag = ToTag
+  }, Bin1, record_info(fields, 'CallId')};
+decode_record(<<?R_LocationNumber, Bin/binary>>) ->
+  [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Digits, DisplayName, CallerId,
+    SipUri, VDN, Bin1] = decodeFromList([enum, enum, bool, enum, enum, enum, enum,
+    list, list, list, list, list], Bin),
+  {#'LocationNumber'{
+    nai         = Nai,
+    ni          = Ni,
+    incomplete  = Incomplete,
+    npi         = Npi,
+    apri        = Apri,
+    screening   = Screening,
+    category    = Category,
+    digits      = Digits,
+    displayName = DisplayName,
+    callerId    = CallerId,
+    sipUri      = SipUri,
+    vdn         = VDN
+  }, Bin1, record_info(fields, 'LocationNumber')};
 decode_record(<<?R_SetupIRType, Bin/binary>>) ->
-  {Domain, Bin1}                     = decode_list(Bin),
-  {CalledPartyNumber, Bin2}          = decode_record(Bin1),
-  {CalledPartysCategory, Bin3}       = decode_enum(Bin2),
-  {CallingPartyNumber, Bin4}         = decode_record(Bin3),
-  {CallingPartysCategory, Bin5}      = decode_enum(Bin4),
-  {LocationNumber, Bin6}             = decode_list(Bin5),
-  {OriginalCalledNumber, Bin7}       = decode_record(Bin6),
-  {UserTeleserviceInformation, Bin8} = decode_list(Bin7),
-  {GenericNumbers, Bin9}             = decode_list(Bin8),
-  {ForwardCallIndicators, Bin10}     = decode_list(Bin9),
-  {RedirectingNumber, Bin11}         = decode_record(Bin10),
-  {RedirectionInformation, Bin12}    = decode_record(Bin11),
-  {USIServiceIndicator, Bin13}       = decode_unknown(Bin12),
-  {USIInformation, Bin14}            = decode_list(Bin13),
-  {ISUPCallReference, Bin15}         = decode_list(Bin14),
-  {SDPType, Bin16}                   = decode_record(Bin15),
-  {MediaPoint, Bin17}                = decode_binary(Bin16),
-  {AdditionalInfo, Bin18}            = decode_list(Bin17),
-  {TrunkGroupId, Bin19}              = decode_record(Bin18),
-  {CallingPartyInfo, Bin20}          = decode_list(Bin19),
-  {CalledPartyInfo, Bin21}           = decode_list(Bin20),
-  {CallingIfaceInfo, Bin22}          = decode_list(Bin21),
-  {CalledIfaceInfo, Bin23}           = decode_list(Bin22),
-  {Refer, Bin24}                     = decode_record(Bin23),
-  {SetupModeType, Bin25}             = decode_enum(Bin24),
-  {Priority, Bin26}                  = decode_record(Bin25),
-  {EventTime, Bin27}                 = decode_time(Bin26),
+  [Domain, CalledPartyNumber, CallingPartyNumber, LocationNumber, OriginalCalledNumber,
+    UserTeleserviceInformation, GenericNumbers, ForwardCallIndicators, RedirectingNumber,
+    RedirectionInformation, USIServiceIndicator, USIInformation, ISUPCallReference,
+    CallId, SDPType, MediaPoint, AdditionalInfo, TrunkGroupId, CallingPartyInfo,
+    CalledPartyInfo, CallingIfaceInfo, CalledIfaceInfo, Refer, SetupModeType, Priority,
+    EventTime, Bin1] = decodeFromList([list, record, record, record, record, list, list,
+    list, record, record, unknown, list, list, record, record, binary, list, record, list,
+    list, list, list, record, enum, record, time], Bin),
   {#'SetupIRType'{
     domain                     = Domain,
     calledPartyNumber          = CalledPartyNumber,
-    calledPartysCategory       = CalledPartysCategory,
     callingPartyNumber         = CallingPartyNumber,
-    callingPartysCategory      = CallingPartysCategory,
     locationNumber             = LocationNumber,
     originalCalledNumber       = OriginalCalledNumber,
     userTeleserviceInformation = UserTeleserviceInformation,
@@ -1454,6 +1437,7 @@ decode_record(<<?R_SetupIRType, Bin/binary>>) ->
     uSIServiceIndicator        = USIServiceIndicator,
     uSIInformation             = USIInformation,
     isupCallRef                = ISUPCallReference,
+    callId                     = CallId,
     sdp                        = SDPType,
     mediaPoint                 = MediaPoint,
     additionalInfo             = AdditionalInfo,
@@ -1466,7 +1450,7 @@ decode_record(<<?R_SetupIRType, Bin/binary>>) ->
     mode                       = SetupModeType,
     priority                   = Priority,
     eventTime                  = EventTime
-  }, Bin27}.
+  }, Bin1, record_info(fields, 'SetupIRType')}.
 
 decode_enum(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
 decode_enum(?DECODE_UNDEFINED) -> {undefined, _Bin};
@@ -1933,7 +1917,7 @@ decode_unknown(?DECODE_UNKNOWN) ->
   BinTerm = binary:part(Bin1, {0,Size}),
   Bin2 = binary:part(Bin1, {Size, ?SIZE(Bin1) - Size}),
   Term = erlang:binary_to_term(BinTerm),
-  {Term, Bin2}.
+  {Term, Bin2, []}.
 
 
 decode_bool(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);

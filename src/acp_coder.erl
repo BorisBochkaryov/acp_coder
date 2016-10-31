@@ -10,7 +10,7 @@
 -compile(inline).
 -compile({inline_size, 128}).
 
--export([test/1, encode/1, decode/1, decode_list/1]).
+-export([test/1, encode/1, decode/1]).
 -include_lib("chronica/include/chronica.hrl").
 -include("INCS3datatypes.hrl").
 -include("INCS3Internals.hrl").
@@ -79,6 +79,8 @@
 -define(R_LocationNumber, 36).
 -define(R_CallerDisplayInformation, 37).
 -define(R_CallId, 38).
+-define(R_SubsequentAddressReq, 39).
+-define(R_SubsequentAddressType, 40).
 -define(R_ErrorRecord, 253).
 -define(UNKNOWN, 254).
 
@@ -139,6 +141,8 @@
 -define(BOOL(Term), {bool, Term}).
 -define(TIME(Term), {time, Term}).
 -define(UNKNOWN(Term), {unknown, Term}).
+-define(TUPLE(Term), {tuple, Term}).
+-define(STRING(Term), {string, Term}).
 
 %%%%%% Macros
 -define(SIZE(Bin), erlang:size(Bin)).
@@ -196,6 +200,8 @@ encodeFromList([{time, H} | T]) ->
   <<(encode_time(H))/binary, (encodeFromList(T))/binary>>;
 encodeFromList([{unknown, H} | T]) ->
   <<(?ENCODE_UNKNOWN(H))/binary, (encodeFromList(T))/binary>>;
+encodeFromList([{typle, H} | T]) ->
+  <<(encode_tuple(H))/binary, (encodeFromList(T))/binary>>;
 encodeFromList([]) ->
   <<>>.
 
@@ -500,6 +506,15 @@ encode_record(#'CallId'{} = Term) ->
                         ?BINARY(Term#'CallId'.toTag)]),
   <<?R_CallId,
     Bin/binary>>;
+encode_record(#'SubsequentAddressReq'{} = Term) ->
+  Bin = encodeFromList([?RECORD(Term#'SubsequentAddressReq'.arg)]),
+  <<?R_SubsequentAddressReq,
+    Bin/binary>>;
+encode_record(#'SubsequentAddressType'{} = Term) ->
+  Bin = encodeFromList([?LIST(Term#'SubsequentAddressType'.digits),
+                        ?RECORD(Term#'SubsequentAddressType'.sdp)]),
+  <<?R_SubsequentAddressType,
+    Bin/binary>>;
 encode_record(undefined) -> ?Z_Undefined;
 encode_record(Pack) -> writeToError(["Unknown Pack",Pack]), ?ENCODE_UNKNOWN(Pack).
 
@@ -684,7 +699,8 @@ encode_enum(?E_OriginalRedirectionReason, 'OriginalRedirectionReason') -> <<?E_O
 encode_enum(?E_RedirectingIndicator, 'RedirectingIndicator') -> <<?E_RedirectingIndicator, 0>>;
 encode_enum(?E_RedirectingIndicator, diversion) -> <<?E_RedirectingIndicator, 1>>;
 encode_enum(?E_RedirectingReasonInfo, 'RedirectingReason') -> <<?E_RedirectingReasonInfo, 0>>;
-encode_enum(?E_RedirectionCounter, Atom) -> <<?E_RedirectionCounter, Atom/binary>>;
+encode_enum(?E_RedirectionCounter, undefined) -> <<?E_RedirectionCounter, 16#FF:8>>;
+encode_enum(?E_RedirectionCounter, Num) -> <<?E_RedirectionCounter, Num:8>>;
 encode_enum(?E_ServingSide, calling) -> <<?E_ServingSide, 0>>;
 encode_enum(?E_ServingSide, called) -> <<?E_ServingSide, 1>>;
 encode_enum(_,undefined) -> ?Z_Undefined;
@@ -747,185 +763,130 @@ encode_list_([], Res, _) -> Res.
 
 
 encode_tuple({sipInfo, List} = Tuple) when ?SIZE(Tuple) == 2 ->
-  BinList = encode_list(List),
-  <<?Tu_sipInfo, BinList/binary>>;
+  Bin = encodeFromList([?LIST(List)]),
+  <<?Tu_sipInfo, 
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == sdp , ?SIZE(Tuple) == 16 ->
-  Version    = encode_binary(?GET_EL(2,Tuple)),
-  Origin     = encode_tuple(?GET_EL(3,Tuple)),
-  Title      = encode_binary(?GET_EL(4,Tuple)),
-  Arg1       = encode_binary(?GET_EL(5,Tuple)),
-  Arg2       = encode_binary(?GET_EL(6,Tuple)),
-  Arg3       = encode_binary(?GET_EL(7,Tuple)),
-  Arg4       = encode_binary(?GET_EL(8,Tuple)),
-  Connection = encode_tuple(?GET_EL(9,Tuple)),
-  List1      = encode_list(?GET_EL(10,Tuple)),
-  Arg5       = encode_binary(?GET_EL(11,Tuple)),
-  List2      = encode_list(?GET_EL(12,Tuple)),
-  Arg6       = encode_binary(?GET_EL(13,Tuple)),
-  Arg7       = encode_binary(?GET_EL(14,Tuple)),
-  List3      = encode_list(?GET_EL(15,Tuple)),
-  List4      = encode_list(?GET_EL(16,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?TUPLE(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple)),
+                        ?BINARY(?GET_EL(5,Tuple)),
+                        ?BINARY(?GET_EL(6,Tuple)),
+                        ?BINARY(?GET_EL(7,Tuple)),
+                        ?BINARY(?GET_EL(8,Tuple)),
+                        ?TUPLE(?GET_EL(9,Tuple)),
+                        ?LIST(?GET_EL(10,Tuple)),
+                        ?BINARY(?GET_EL(11,Tuple)),
+                        ?LIST(?GET_EL(12,Tuple)),
+                        ?BINARY(?GET_EL(13,Tuple)),
+                        ?BINARY(?GET_EL(14,Tuple)),
+                        ?LIST(?GET_EL(15,Tuple)),
+                        ?LIST(?GET_EL(16,Tuple))]),
   <<?Tu_sdp,
-    Version/binary,
-    Origin/binary,
-    Title/binary,
-    Arg1/binary,
-    Arg2/binary,
-    Arg3/binary,
-    Arg4/binary,
-    Connection/binary,
-    List1/binary,
-    Arg5/binary,
-    List2/binary,
-    Arg6/binary,
-    Arg7/binary,
-    List3/binary,
-    List4/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == origin , ?SIZE(Tuple) == 7 ->
-  Symbol = encode_binary(?GET_EL(2,Tuple)),
-  Num1   = encode_binary(?GET_EL(3,Tuple)),
-  Num2   = encode_binary(?GET_EL(4,Tuple)),
-  Type   = encode_binary(?GET_EL(5,Tuple)),
-  Prot   = encode_binary(?GET_EL(6,Tuple)),
-  Ip     = encode_binary(?GET_EL(7,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple)),
+                        ?BINARY(?GET_EL(5,Tuple)),
+                        ?BINARY(?GET_EL(6,Tuple)),
+                        ?BINARY(?GET_EL(7,Tuple))]),
   <<?Tu_origin,
-    Symbol/binary,
-    Num1/binary,
-    Num2/binary,
-    Type/binary,
-    Prot/binary,
-    Ip/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == connection , ?SIZE(Tuple) == 4->
-  Type = encode_binary(?GET_EL(2,Tuple)),
-  Prot = encode_binary(?GET_EL(3,Tuple)),
-  Ip   = encode_binary(?GET_EL(4,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple))]),
   <<?Tu_connection,
-    Type/binary,
-    Prot/binary,
-    Ip/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == media_description , ?SIZE(Tuple) == 7 ->
-  Media = encode_tuple(?GET_EL(2,Tuple)),
-  Arg1  = encode_binary(?GET_EL(3,Tuple)),
-  Arg2  = encode_tuple(?GET_EL(4,Tuple)),
-  List1 = encode_list(?GET_EL(5,Tuple)),
-  Arg3  = encode_binary(?GET_EL(6,Tuple)),
-  List2 = encode_list(?GET_EL(7,Tuple)),
+  Bin = encodeFromList([?TUPLE(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?TUPLE(?GET_EL(4,Tuple)),
+                        ?LIST(?GET_EL(5,Tuple)),
+                        ?BINARY(?GET_EL(6,Tuple)),
+                        ?LIST(?GET_EL(7,Tuple))]),
   <<?Tu_media_description,
-    Media/binary,
-    Arg1/binary,
-    Arg2/binary,
-    List1/binary,
-    Arg3/binary,
-    List2/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == media , ?SIZE(Tuple) == 6 ->
-  Type    = encode_binary(?GET_EL(2,Tuple)),
-  Size    = encode_binary(?GET_EL(3,Tuple)),
-  Arg     = encode_binary(?GET_EL(4,Tuple)),
-  Prot    = encode_binary(?GET_EL(5,Tuple)),
-  Formats = encode_list(?GET_EL(6,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple)),
+                        ?BINARY(?GET_EL(5,Tuple)),
+                        ?LIST(?GET_EL(6,Tuple))]),
   <<?Tu_media,
-    Type/binary,
-    Size/binary,
-    Arg/binary,
-    Prot/binary,
-    Formats/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == attribute , ?SIZE(Tuple) == 4 ->
-  Type    = encode_binary(?GET_EL(2,Tuple)),
-  Version = encode_binary(?GET_EL(3,Tuple)),
-  Atom    = encode_binary(?GET_EL(4,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple))]),
   <<?Tu_attribute,
-    Type/binary,
-    Version/binary,
-    Atom/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == ss_entity , ?SIZE(Tuple) == 10 ->
-  Atom1  = encode_binary(?GET_EL(2,Tuple)),
-  Atom2  = encode_binary(?GET_EL(3,Tuple)),
-  Number = encode_integer(?GET_EL(4,Tuple)),
-  Bool1  = ?ENCODE_BOOL(?GET_EL(5,Tuple)),
-  Bool2  = ?ENCODE_BOOL(?GET_EL(6,Tuple)),
-  Arg1   = encode_binary(?GET_EL(7,Tuple)),
-  List1  = encode_list(?GET_EL(8,Tuple)),
-  List2  = encode_list(?GET_EL(9,Tuple)),
-  List3  = encode_list(?GET_EL(10,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?INTEGER(?GET_EL(4,Tuple)),
+                        ?BOOL(?GET_EL(5,Tuple)),
+                        ?BOOL(?GET_EL(6,Tuple)),
+                        ?BINARY(?GET_EL(7,Tuple)),
+                        ?LIST(?GET_EL(8,Tuple)),
+                        ?LIST(?GET_EL(9,Tuple)),
+                        ?LIST(?GET_EL(10,Tuple))]),
   <<?Tu_SSEntity,
-    Atom1/binary,
-    Atom2/binary,
-    Number/binary,
-    Bool1/binary,
-    Bool2/binary,
-    Arg1/binary,
-    List1/binary,
-    List2/binary,
-    List3/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == format , ?SIZE(Tuple) == 8 ->
-  Bit     = encode_binary(?GET_EL(2,Tuple)),
-  Codec   = encode_binary(?GET_EL(3,Tuple)),
-  Kb      = encode_binary(?GET_EL(4,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple)),
+                        ?BINARY(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple))]),
   if
     erlang:is_list(?GET_EL(5,Tuple)) == true ->
       Version = encode_list(?GET_EL(5,Tuple));
     true ->
       Version = encode_binary(?GET_EL(5,Tuple))
   end,
-  Info    = encode_binary(?GET_EL(6,Tuple)),
-  Arg1    = ?ENCODE_BOOL(?GET_EL(7,Tuple)),
-  Arg2    = ?ENCODE_BOOL(?GET_EL(8,Tuple)),
+  Bin1 = encodeFromList([?BINARY(?GET_EL(6,Tuple)),
+                         ?BOOL(?GET_EL(7,Tuple)),
+                         ?BOOL(?GET_EL(8,Tuple))]),
   <<?Tu_format,
-    Bit/binary,
-    Codec/binary,
-    Kb/binary,
+    Bin/binary,
     Version/binary,
-    Info/binary,
-    Arg1/binary,
-    Arg2/binary>>;
+    Bin1/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'MediaId' , ?SIZE(Tuple) == 2 ->
-  Bin = encode_binary(?GET_EL(2,Tuple)),
+  Bin = encodeFromList([?BINARY(?GET_EL(2,Tuple))]),
   <<?Tu_MediaId,
     Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'AdditionalISUP' , ?SIZE(Tuple) == 3 ->
-  Msg  = ?ENCODE_STRING(?GET_EL(2,Tuple)),
-  List = encode_list(?GET_EL(3,Tuple)),
+  Bin = encodeFromList([?STRING(?GET_EL(2,Tuple)),
+                        ?LIST(?GET_EL(3,Tuple))]),
   <<?Tu_AdditionalISUP,
-    Msg/binary,
-    List/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'AdditionalSIP' , ?SIZE(Tuple) == 3 ->
-  Msg    = encode_list(?GET_EL(2,Tuple)),
-  Params = encode_list(?GET_EL(3,Tuple)),
+  Bin = encodeFromList([?LIST(?GET_EL(2,Tuple)),
+                        ?LIST(?GET_EL(3,Tuple))]),
   <<?Tu_AdditionalSIP,
-    Msg/binary,
-    Params/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'AdditionalSIPParam' , ?SIZE(Tuple) == 3 ->
-  Type  = encode_list(?GET_EL(2,Tuple)),
-  Value = encode_list(?GET_EL(3,Tuple)),
+  Bin = encodeFromList([?LIST(?GET_EL(2,Tuple)),
+                        ?LIST(?GET_EL(3,Tuple))]),
   <<?Tu_AdditionalSIPParam,
-    Type/binary,
-    Value/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'AdditionalISUPParam' , ?SIZE(Tuple) == 4 ->
-  Type   = encode_integer(?GET_EL(2,Tuple)),
-  Length = encode_integer(?GET_EL(3,Tuple)),
-  Value  = encode_binary(?GET_EL(4,Tuple)),
+  Bin = encodeFromList([?INTEGER(?GET_EL(2,Tuple)),
+                        ?INTEGER(?GET_EL(3,Tuple)),
+                        ?BINARY(?GET_EL(4,Tuple))]),
   <<?Tu_AdditionalISUPParam,
-    Type/binary,
-    Length/binary,
-    Value/binary>>;
+    Bin/binary>>;
 encode_tuple(Tuple) when ?GET_EL(1,Tuple) == 'SSNotification' , ?SIZE(Tuple) == 9 ->
-  SSFamily         = ?ENCODE_UNKNOWN(?GET_EL(2,Tuple)),
-  CGPN             = encode_record(?GET_EL(3,Tuple)),
-  CDPN             = encode_record(?GET_EL(4,Tuple)),
-  ServingSide      = encode_enum(?E_ServingSide,?GET_EL(5,Tuple)),
-  ServiceTimeStamp = encode_time(?GET_EL(6,Tuple)),
-  Participants     = encode_list(?GET_EL(7,Tuple)),
-  Internal         = ?ENCODE_BOOL(?GET_EL(8,Tuple)),
-  Args             = encode_tuple(?GET_EL(9,Tuple)),
+  Bin = encodeFromList([?UNKNOWN(?GET_EL(2,Tuple)),
+                        ?RECORD(?GET_EL(3,Tuple)),
+                        ?RECORD(?GET_EL(4,Tuple)),
+                        ?ENUM(?E_ServingSide,?GET_EL(5,Tuple)),
+                        ?TIME(?GET_EL(6,Tuple)),
+                        ?LIST(?GET_EL(7,Tuple)),
+                        ?BOOL(?GET_EL(8,Tuple)),
+                        ?TUPLE(?GET_EL(9,Tuple))]),
   <<?Tu_SSNotification,
-    SSFamily/binary,
-    CGPN/binary,
-    CDPN/binary,
-    ServingSide/binary,
-    ServiceTimeStamp/binary,
-    Participants/binary,
-    Internal/binary,
-    Args/binary>>;
+    Bin/binary>>;
 encode_tuple({Key, Value} = Tuple) when ?SIZE(Tuple) == 2 , ?SIZE(Tuple) == 2 ->
   BinKey     = erlang:term_to_binary(Key),
   SizeKey    = ?SIZE(BinKey),
@@ -1012,7 +973,7 @@ decode(Pack) ->
       0 ->
         log:debug("decode args: ~p", [Pack]),
         TimeStart = erlang:monotonic_time(micro_seconds),
-        try decode_record(Pack) of
+        case decode_record(Pack) of
           Packet ->
             case Packet of
               {Result, Commit, _Bin} ->
@@ -1021,50 +982,59 @@ decode(Pack) ->
             _ ->
               erlang:throw({decode_error, Pack})
             end
-        catch
-          _:Error ->
-            log:error("decode error for ~p: ~p",[Pack,Error])
+        % catch
+        %   _:Error ->
+        %     log:error("decode error for ~p: ~p",[Pack,Error])
         end
   end.
 
-decodeFromList([binary | T], Bin) ->
+decode([binary | T], Bin) ->
   {Binary, Bin1} = decode_binary(Bin),
-  [Binary] ++ decodeFromList(T, Bin1);
-decodeFromList([integer | T], Bin) ->
+  [Binary] ++ decode(T, Bin1);
+decode([integer | T], Bin) ->
   {Integer, Bin1} = decode_integer(Bin),
-  [Integer] ++ decodeFromList(T, Bin1);
-decodeFromList([record | T], Bin) ->
+  [Integer] ++ decode(T, Bin1);
+decode([record | T], Bin) ->
   case ?WIRESHARK of
     1 ->
       {Record, Bin1, Fields} = decode_record(Bin),
-      [{erlang:length(Fields), Fields, Record}] ++ decodeFromList(T, Bin1);
+      [{erlang:length(Fields), Fields, Record}] ++ decode(T, Bin1);
     _ ->
       {Record, Bin1, _} = decode_record(Bin),
-      [Record] ++ decodeFromList(T, Bin1)
+      [Record] ++ decode(T, Bin1)
   end;
-decodeFromList([enum | T], Bin) ->
+decode([enum | T], Bin) ->
   {Enum, Bin1} = decode_enum(Bin),
-  [Enum] ++ decodeFromList(T, Bin1);
-decodeFromList([list | T], Bin) ->
+  [Enum] ++ decode(T, Bin1);
+decode([list | T], Bin) ->
   {List, Bin1} = decode_list(Bin),
-  [List] ++ decodeFromList(T, Bin1);
-decodeFromList([bool | T], Bin) ->
+  [List] ++ decode(T, Bin1);
+decode([bool | T], Bin) ->
   {Bool, Bin1} = decode_bool(Bin),
-  [Bool] ++ decodeFromList(T, Bin1);
-decodeFromList([time | T], Bin) ->
+  [Bool] ++ decode(T, Bin1);
+decode([time | T], Bin) ->
   {Time, Bin1} = decode_time(Bin),
-  [Time] ++ decodeFromList(T, Bin1);
- decodeFromList([unknown | T], Bin) ->
+  [Time] ++ decode(T, Bin1);
+decode([unknown | T], Bin) ->
   {Unknown, Bin1} = decode_unknown(Bin),
-  [Unknown] ++ decodeFromList(T, Bin1);
-decodeFromList([], <<>>) -> [<<>>];
-decodeFromList([], Bin) -> [Bin].
+  [Unknown] ++ decode(T, Bin1);
+decode([tuple | T], Bin) ->
+  case ?WIRESHARK of
+      1 ->
+          {Tuple, Bin1, Fields} = decode_tuple(Bin),
+          [{erlang:length(Fields), Fields, Tuple}] ++ decode(T, Bin1);
+      _ ->
+          {Tuple, Bin1, _} = decode_tuple(Bin),
+          [Tuple] ++ decode(T, Bin1)
+  end;
+decode([], <<>>) -> [<<>>];
+decode([], Bin) -> [Bin].
 
 decode_record(?DECODE_UNDEFINED) -> {undefined, _Bin, []};
 decode_record(<<?UNKNOWN, _/binary>> = Term) -> decode_unknown(Term);
 decode_record(<<?R_AcpMessage, ?T_String, Bin/binary>>) ->
   _Bin = <<?T_String, Bin/binary>>,
-  [Commit, Uri, CallRef, Body, Bin1] = decodeFromList([list, binary, integer, record], _Bin),
+  [Commit, Uri, CallRef, Body, Bin1] = decode([list, binary, integer, record], _Bin),
   case ?WIRESHARK of
     1 -> {record_info(fields, 'AcpMessage'),
            #'AcpMessage'{
@@ -1079,7 +1049,7 @@ decode_record(<<?R_AcpMessage, ?T_String, Bin/binary>>) ->
            }, Commit, Bin1}
   end;
 decode_record(<<?R_AcpMessage, Bin/binary>>) ->
-  [Uri, CallRef, Body, Bin1] = decodeFromList([binary, integer, record], Bin),
+  [Uri, CallRef, Body, Bin1] = decode([binary, integer, record], Bin),
   case ?WIRESHARK of
     1 -> {record_info(fields, 'AcpMessage'),
          #'AcpMessage'{
@@ -1094,54 +1064,54 @@ decode_record(<<?R_AcpMessage, Bin/binary>>) ->
          }, undefined, Bin1}
   end;
 decode_record(<<?R_ServiceFeatureInd, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record], Bin),
+  [Arg, Bin1] = decode([record], Bin),
   {#'ServiceFeatureInd'{
     arg = Arg
   }, Bin1, record_info(fields, 'ServiceFeatureInd')};
 decode_record(<<?R_ServiceFeatureType, Bin/binary>>) ->
-  [Cause, AddInfo, Bin1] = decodeFromList([enum, list], Bin),
+  [Cause, AddInfo, Bin1] = decode([enum, list], Bin),
   {#'ServiceFeatureType'{
     cause          = Cause,
     additionalInfo = AddInfo
   }, Bin1, record_info(fields, 'ServiceFeatureType')};
 decode_record(<<?R_SetupReqAck, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record], Bin),
+  [Arg, Bin1] = decode([record], Bin),
   {#'SetupReqAck'{
     arg = Arg
   }, Bin1, record_info(fields, 'SetupReqAck')};
 decode_record(<<?R_SetupIndAck, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record],Bin),
+  [Arg, Bin1] = decode([record],Bin),
   {#'SetupIndAck'{
     arg = Arg
   }, Bin1, record_info(fields, 'SetupIndAck')};
 decode_record(<<?R_SetupReq, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record], Bin),
+  [Arg, Bin1] = decode([record], Bin),
   {#'SetupReq'{
     arg = Arg
   }, Bin1, record_info(fields, 'SetupReq')};
 decode_record(<<?R_SetupAckType, Bin/binary>>) ->
-  [Refer, TrunkGroupId, Bin1] = decodeFromList([record, record], Bin),
+  [Refer, TrunkGroupId, Bin1] = decode([record, record], Bin),
   {#'SetupAckType'{
     refer        = Refer,
     trunkGroupId = TrunkGroupId
   }, Bin1, record_info(fields, 'SetupAckType')};
 decode_record(<<?R_CallProgressReq, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record], Bin),
+  [Arg, Bin1] = decode([record], Bin),
   {#'CallProgressReq'{
     arg = Arg
   }, Bin1, record_info(fields, 'CallProgressReq')};
 decode_record(<<?R_CallProgressInd, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record], Bin),
+  [Arg, Bin1] = decode([record], Bin),
   {#'CallProgressInd'{
     arg = Arg
   }, Bin1, record_info(fields, 'CallProgressInd')};
 decode_record(<<?R_CallProgressType, Bin/binary>>) ->
-  [Cause, CauseInitiator, CauseDescription, CauseIsup, EventInformation, AdditionalInfo,
-    OBCI, GNotification, RedirectionNumber, RedirectionResInd, CallDiversionInfo,
-    Facility, CallId, SDP, MediaPoint, TrunkGroupId, CallTransferNumber, Refer,
-    EventTime, Bin1] = decodeFromList([enum, enum, list, binary, record, list, record,
-    list, record, enum, record, list, record, record, binary, record, record, record,
-    time], Bin),
+  [Cause, CauseInitiator, CauseDescription, CauseIsup, EventInformation, 
+    AdditionalInfo, Bin1] = decode([enum, enum, list, binary, record, list], Bin),
+  [OBCI, GNotification, RedirectionNumber, RedirectionResInd, CallDiversionInfo,
+    Bin2] = decode([record, list, record, enum, record], Bin1),
+  [Facility, CallId, SDP, TrunkGroupId, CallTransferNumber, Refer, EventTime, 
+    Bin3] = decode([list, record, record, record, record, record, time], Bin2),
   {#'CallProgressType'{
     cause              = Cause,
     causeInitiator     = CauseInitiator,
@@ -1157,21 +1127,20 @@ decode_record(<<?R_CallProgressType, Bin/binary>>) ->
     facility           = Facility,
     callId             = CallId,
     sdp                = SDP,
-    mediaPoint         = MediaPoint,
     trunkGroupId       = TrunkGroupId,
     callTransferNumber = CallTransferNumber,
     refer              = Refer,
     eventTime          = EventTime
-  }, Bin1, record_info(fields, 'CallProgressType')};
+  }, Bin3, record_info(fields, 'CallProgressType')};
 decode_record(<<?R_EventInformation, Bin/binary>>) ->
-  [EvInd, EvPrInd, Bin1] = decodeFromList([enum, enum], Bin),
+  [EvInd, EvPrInd, Bin1] = decode([enum, enum], Bin),
   {#'EventInformation'{
     eventIndicator             = EvInd,
     eventPresentationIndicator = EvPrInd
   }, Bin1, record_info(fields, 'EventInformation')};
 decode_record(<<?R_OptionalBackwardCallIndicators, Bin/binary>>) ->
   [InbII, CallDiversionInd, SimpleSegmentationInf, MlppUserInd, Bin1] =
-  decodeFromList([enum, enum, enum, enum], Bin),
+  decode([enum, enum, enum, enum], Bin),
   {#'OptionalBackwardCallIndicators'{
     inbInfoInd            = InbII,
     callDiversionInd      = CallDiversionInd,
@@ -1179,8 +1148,9 @@ decode_record(<<?R_OptionalBackwardCallIndicators, Bin/binary>>) ->
     mlppUserInd           = MlppUserInd
   }, Bin1, record_info(fields, 'OptionalBackwardCallIndicators')};
 decode_record(<<?R_RedirectingNumber, Bin/binary>>) ->
-  [Nai, Ni, Incomplete, Npi, Apri, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
-  decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
+  [Nai, Ni, Incomplete, Npi, Apri, Category, Bin1] = decode([enum, enum, bool, 
+    enum, enum, enum], Bin),
+  [Digits, DisplayName, SipUri, VDN, Bin2] = decode([list, list, list, list], Bin1),
   {#'RedirectingNumber'{
     nai        = Nai,
     ni         = Ni,
@@ -1192,21 +1162,21 @@ decode_record(<<?R_RedirectingNumber, Bin/binary>>) ->
     displayName= DisplayName,
     sipUri     = SipUri,
     vdn        = VDN
-  },Bin1, record_info(fields, 'RedirectingNumber')};
+  },Bin2, record_info(fields, 'RedirectingNumber')};
 decode_record(<<?R_CallDiversionInformation, Bin/binary>>) ->
-  [NotifSubsOpts, RedirectingReason, Bin1] = decodeFromList([enum, enum], Bin),
+  [NotifSubsOpts, RedirectingReason, Bin1] = decode([enum, enum], Bin),
   {#'CallDiversionInformation'{
     notificationSubsOpts = NotifSubsOpts,
     redirectingReason    = RedirectingReason
   }, Bin1, record_info(fields, 'CallDiversionInformation')};
 decode_record(<<?R_SDPType, Bin/binary>>) ->
-  [Type, Body, Bin1] = decodeFromList([enum, list], Bin),
+  [Type, Body, Bin1] = decode([enum, list], Bin),
   {#'SDPType'{
     type = Type,
     body = Body
   }, Bin1, record_info(fields, 'SDPType')};
 decode_record(<<?R_TrunkGroupId, Bin/binary>>) ->
-  [TrunkGroupId, TrunkId, PCMId, ChannelNumber, Bin1] = decodeFromList([list,
+  [TrunkGroupId, TrunkId, PCMId, ChannelNumber, Bin1] = decode([list,
     list, list, integer], Bin),
   {#'TrunkGroupId'{
     trunkGroupId  = TrunkGroupId,
@@ -1215,9 +1185,9 @@ decode_record(<<?R_TrunkGroupId, Bin/binary>>) ->
     channelNumber = ChannelNumber
   }, Bin1, record_info(fields, 'TrunkGroupId')};
 decode_record(<<?R_CallTransferNumber, Bin/binary>>) ->
-  [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Digits, DisplayName, SipUri,
-    VDN, Bin1] = decodeFromList([enum, enum, bool, enum, enum, enum, enum, list, list,
-    list, list], Bin),
+  [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Bin1] = decode([enum, enum, 
+    bool, enum, enum, enum, enum], Bin),
+  [Digits, DisplayName, SipUri, VDN, Bin2] = decode([list, list, list, list], Bin1),
   {#'CallTransferNumber'{
     nai        = Nai,
     ni         = Ni,
@@ -1230,12 +1200,12 @@ decode_record(<<?R_CallTransferNumber, Bin/binary>>) ->
     displayName= DisplayName,
     sipUri     = SipUri,
     vdn        = VDN
-  }, Bin1, record_info(fields, 'CallTransferNumber')};
+  }, Bin2, record_info(fields, 'CallTransferNumber')};
 decode_record(<<?R_Refer, Bin/binary>>) ->
-  [List, Bin1] = decodeFromList([list],Bin),
+  [List, Bin1] = decode([list],Bin),
   {{refer, List}, Bin1, [refer]};
 decode_record(<<?R_ReferType, Bin/binary>>) ->
-  [Exchange, RoutingKey, Sid, CallRef, ConfId, Bin1] = decodeFromList([list, list, binary,
+  [Exchange, RoutingKey, Sid, CallRef, ConfId, Bin1] = decode([list, list, binary,
     integer, list], Bin),
   {#'ReferType'{
     exchange   = Exchange,
@@ -1246,7 +1216,7 @@ decode_record(<<?R_ReferType, Bin/binary>>) ->
   }, Bin1, record_info(fields, 'ReferType')};
 decode_record(<<?R_RedirectionNumber, Bin/binary>>) ->
   [Nai, Ni, Incomplete, Inni, Npi, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
-    decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
+    decode([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'RedirectionNumber'{
     nai         = Nai,
     ni          = Ni,
@@ -1260,13 +1230,13 @@ decode_record(<<?R_RedirectionNumber, Bin/binary>>) ->
     vdn         = VDN
   }, Bin1, record_info(fields, 'RedirectionNumber')};
 decode_record(<<?R_ReleaseReq, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record], Bin),
+  [Arg, Bin1] = decode([record], Bin),
   {#'ReleaseReq'{
     arg = Arg
   }, Bin1, record_info(fields, 'ReleaseReq')};
 decode_record(<<?R_ReleaseType, Bin/binary>>) ->
   [Cause, CauseInitiator, CauseDescription, Digits, CauseIsup, AdditionalInfo,
-    TrunkGroupId, Refer, NeedAck, EventTime, Bin1] = decodeFromList([enum, enum,
+    TrunkGroupId, Refer, NeedAck, EventTime, Bin1] = decode([enum, enum,
     list, list, binary, list, record, record, bool, time], Bin),
   {#'ReleaseType'{
     cause            = Cause,
@@ -1281,13 +1251,13 @@ decode_record(<<?R_ReleaseType, Bin/binary>>) ->
     eventTime        = EventTime
   }, Bin1, record_info(fields, 'ReleaseType')};
 decode_record(<<?R_ReleaseInd, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record],Bin),
+  [Arg, Bin1] = decode([record],Bin),
   {#'ReleaseInd'{
     arg = Arg
   }, Bin1, record_info(fields, 'ReleaseInd')};
 decode_record(<<?R_CalledPartyNumber, Bin/binary>>) ->
   [Nai, Ni, Incomplete, Inni, Npi, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
-    decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
+    decode([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'CalledPartyNumber'{
     nai         = Nai,
     ni          = Ni,
@@ -1302,7 +1272,7 @@ decode_record(<<?R_CalledPartyNumber, Bin/binary>>) ->
   }, Bin1, record_info(fields, 'CalledPartyNumber')};
 decode_record(<<?R_CallingPartyNumber, Bin/binary>>) ->
   [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Digits, CRDI, SipUri, VDN, Bin1] =
-    decodeFromList([enum, enum, bool, enum, enum, enum, enum, list, record, list, list], Bin),
+    decode([enum, enum, bool, enum, enum, enum, enum, list, record, list, list], Bin),
   {#'CallingPartyNumber'{
     nai         = Nai,
     ni          = Ni,
@@ -1317,7 +1287,7 @@ decode_record(<<?R_CallingPartyNumber, Bin/binary>>) ->
     vdn         = VDN
   }, Bin1, record_info(fields, 'CallingPartyNumber')};
 decode_record(<<?R_CallerDisplayInformation, Bin/binary>>) ->
-  [ShowDisplayName, DisplayName, ShowCallerId, CallerId, Bin1] = decodeFromList([enum,
+  [ShowDisplayName, DisplayName, ShowCallerId, CallerId, Bin1] = decode([enum,
     list, bool, list], Bin),
   {#'CallerDisplayInformation'{
     showDisplayName = ShowDisplayName,
@@ -1326,14 +1296,14 @@ decode_record(<<?R_CallerDisplayInformation, Bin/binary>>) ->
     callerId = CallerId
   }, Bin1, record_info(fields, 'CallerDisplayInformation')};
 decode_record(<<?R_SetupResp, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record],Bin),
+  [Arg, Bin1] = decode([record],Bin),
   {#'SetupResp'{
     arg = Arg
   }, Bin1, record_info(fields, 'SetupResp')};
 decode_record(<<?R_SetupCRType, Bin/binary>>) ->
   [ConnectedNumber, AdditionalInfo, RedirectionNumber, RedirectionRestInd, CallId, Sdp,
-    ObsoleteMediaPoint, Refer, EventTime, Bin1] = decodeFromList([record, list, record,
-    enum, record, record, binary, record, time], Bin),
+    Refer, EventTime, Bin1] = decode([record, list, record,
+    enum, record, record, record, time], Bin),
   {#'SetupCRType'{
     connectedNumber    = ConnectedNumber,
     additionalInfo     = AdditionalInfo,
@@ -1341,13 +1311,12 @@ decode_record(<<?R_SetupCRType, Bin/binary>>) ->
     redirectionRestInd = RedirectionRestInd,
     callId             = CallId,
     sdp                = Sdp,
-    obsoleteMediaPoint = ObsoleteMediaPoint,
     refer              = Refer,
     eventTime          = EventTime
   }, Bin1, record_info(fields, 'SetupCRType')};
 decode_record(<<?R_OriginalCalledNumber, Bin/binary>>) ->
   [Nai, Ni, Incomplete, Npi, Apri, Category, Digits, DisplayName, SipUri, VDN, Bin1] =
-    decodeFromList([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
+    decode([enum, enum, bool, enum, enum, enum, list, list, list, list], Bin),
   {#'OriginalCalledNumber'{
     nai         = Nai,
     ni          = Ni,
@@ -1362,7 +1331,7 @@ decode_record(<<?R_OriginalCalledNumber, Bin/binary>>) ->
   }, Bin1, record_info(fields, 'OriginalCalledNumber')};
 decode_record(<<?R_RedirectionInformation, Bin/binary>>) ->
   [OriginalRedirectionReason, RedirectingIndicator, RedirectingReason, RedirectionCounter,
-    Bin1] = decodeFromList([enum, enum, enum, enum], Bin),
+    Bin1] = decode([enum, enum, enum, enum], Bin),
   {#'RedirectionInformation'{
     originalRedirectionReason = OriginalRedirectionReason,
     redirectingIndicator      = RedirectingIndicator,
@@ -1370,7 +1339,7 @@ decode_record(<<?R_RedirectionInformation, Bin/binary>>) ->
     redirectionCounter        = RedirectionCounter
   }, Bin1, record_info(fields, 'RedirectionInformation')};
 decode_record(<<?R_MLPPPrecedence, Bin/binary>>) ->
-  [Lfb, PrecedenceLevel, NetworkIdentity, MlppServiceDomain, Bin1] = decodeFromList([
+  [Lfb, PrecedenceLevel, NetworkIdentity, MlppServiceDomain, Bin1] = decode([
     integer, integer, integer, integer], Bin),
   {#'MLPPPrecedence'{
     lfb                 = Lfb,
@@ -1379,25 +1348,36 @@ decode_record(<<?R_MLPPPrecedence, Bin/binary>>) ->
     mlpp_service_domain = MlppServiceDomain
   }, Bin1, record_info(fields, 'MLPPPrecedence')};
 decode_record(<<?R_SetupInd, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record],Bin),
+  [Arg, Bin1] = decode([record],Bin),
   {#'SetupInd'{
     arg = Arg
   }, Bin1, record_info(fields, 'SetupInd')};
 decode_record(<<?R_SetupConf, Bin/binary>>) ->
-  [Arg, Bin1] = decodeFromList([record],Bin),
+  [Arg, Bin1] = decode([record],Bin),
   {#'SetupConf'{
     arg = Arg
   }, Bin1, record_info(fields, 'SetupConf')};
 decode_record(<<?R_CallId, Bin/binary>>) ->
-  [Id, FromTag, ToTag, Bin1] = decodeFromList([binary, binary, binary], Bin),
+  [Id, FromTag, ToTag, Bin1] = decode([binary, binary, binary], Bin),
   {#'CallId'{
     id = Id,
     fromTag = FromTag,
     toTag = ToTag
   }, Bin1, record_info(fields, 'CallId')};
+decode_record(<<?R_SubsequentAddressReq, Bin/binary>>) ->
+  [Arg, Bin1] = decode([record], Bin),
+  {#'SubsequentAddressReq'{
+    arg = Arg
+  }, Bin1, record_info(fields, 'SubsequentAddressReq')};
+decode_record(<<?R_SubsequentAddressType, Bin/binary>>) ->
+  [Digits, Sdp, Bin1] = decode([list, record], Bin),
+  {#'SubsequentAddressType'{
+    digits = Digits,
+    sdp = Sdp
+  }, Bin1, record_info(fields, 'SubsequentAddressType')};
 decode_record(<<?R_LocationNumber, Bin/binary>>) ->
   [Nai, Ni, Incomplete, Npi, Apri, Screening, Category, Digits, DisplayName, CallerId,
-    SipUri, VDN, Bin1] = decodeFromList([enum, enum, bool, enum, enum, enum, enum,
+    SipUri, VDN, Bin1] = decode([enum, enum, bool, enum, enum, enum, enum,
     list, list, list, list, list], Bin),
   {#'LocationNumber'{
     nai         = Nai,
@@ -1415,13 +1395,13 @@ decode_record(<<?R_LocationNumber, Bin/binary>>) ->
   }, Bin1, record_info(fields, 'LocationNumber')};
 decode_record(<<?R_SetupIRType, Bin/binary>>) ->
   [Domain, CalledPartyNumber, CallingPartyNumber, LocationNumber, OriginalCalledNumber,
-    UserTeleserviceInformation, GenericNumbers, ForwardCallIndicators, RedirectingNumber,
-    RedirectionInformation, USIServiceIndicator, USIInformation, ISUPCallReference,
-    CallId, SDPType, MediaPoint, AdditionalInfo, TrunkGroupId, CallingPartyInfo,
+    UserTeleserviceInformation, Bin1] = decode([list, record, record, record, record, list], Bin),
+  [GenericNumbers, ForwardCallIndicators, RedirectingNumber, RedirectionInformation, 
+    USIServiceIndicator, USIInformation, Bin2] = decode([list, list, record, record, unknown, list], Bin1),
+  [ISUPCallReference, CallId, SDPType, MediaPoint, AdditionalInfo, TrunkGroupId, CallingPartyInfo,
     CalledPartyInfo, CallingIfaceInfo, CalledIfaceInfo, Refer, SetupModeType, Priority,
-    EventTime, Bin1] = decodeFromList([list, record, record, record, record, list, list,
-    list, record, record, unknown, list, list, record, record, binary, list, record, list,
-    list, list, list, record, enum, record, time], Bin),
+    EventTime, Bin3] = decode([list, record, record, binary, list, record, list,
+    list, list, list, record, enum, record, time], Bin2),
   {#'SetupIRType'{
     domain                     = Domain,
     calledPartyNumber          = CalledPartyNumber,
@@ -1449,7 +1429,7 @@ decode_record(<<?R_SetupIRType, Bin/binary>>) ->
     mode                       = SetupModeType,
     priority                   = Priority,
     eventTime                  = EventTime
-  }, Bin1, record_info(fields, 'SetupIRType')}.
+  }, Bin3, record_info(fields, 'SetupIRType')}.
 
 decode_enum(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
 decode_enum(?DECODE_UNDEFINED) -> {undefined, _Bin};
@@ -1633,7 +1613,8 @@ decode_enum(<<?E_OriginalRedirectionReason, 0, Bin/binary>>) -> {'OriginalRedire
 decode_enum(<<?E_RedirectingIndicator, 0, Bin/binary>>) -> {'RedirectingIndicator', Bin};
 decode_enum(<<?E_RedirectingIndicator, 1, Bin/binary>>) -> {diversion, Bin};
 decode_enum(<<?E_RedirectingReasonInfo, 0, Bin/binary>>) -> {'RedirectingReason', Bin};
-decode_enum(<<?E_RedirectionCounter, Atom, Bin/binary>>) -> {Atom, Bin};
+decode_enum(<<?E_RedirectionCounter, 16#FF:8, Bin/binary>>) -> {undefined, Bin};
+decode_enum(<<?E_RedirectionCounter, Num:8, Bin/binary>>) -> {Num, Bin};
 decode_enum(<<?E_ServingSide, 0, Bin/binary>>) -> {calling, Bin};
 decode_enum(<<?E_ServingSide, 1, Bin/binary>>) -> {called, Bin}.
 
@@ -1648,15 +1629,15 @@ decode_integer(?DECODE_UNDEFINED) -> {undefined, _Bin};
 decode_integer(?DECODE_UNKNOWN = BinTerm) -> decode_unknown(BinTerm);
 decode_integer(?DECODE_INTEGER) ->
   BinInt = binary:part(_Bin, {0,_Size}),
-  Int = erlang:binary_to_term(BinInt),
+  Int    = erlang:binary_to_term(BinInt),
   {Int,binary:part(_Bin, {_Size, ?SIZE(_Bin) - _Size})};
 decode_integer(?DECODE_LONG_INTEGER) ->
   {binary_to_integer(_Bin),_Rest}.
 
 
 decode_time(?DECODE_TIME) ->
-  MeSec = erlang:binary_to_integer(_BinMeSec),
-  Sec = erlang:binary_to_integer(_BinSec),
+  MeSec  = erlang:binary_to_integer(_BinMeSec),
+  Sec    = erlang:binary_to_integer(_BinSec),
   MicSec = erlang:binary_to_integer(_BinMicSec),
   {{MeSec, Sec, MicSec}, _Bin}.
 
@@ -1666,14 +1647,14 @@ decode_list(?DECODE_UNDEFINED) -> {undefined, _Bin};
 decode_list(<<?T_List, 0, Rest/binary>>) -> {[], Rest};
 decode_list(?DECODE_STRING) -> % строка
   BinElem = binary:part(_Bin, {0,_Size}),
-  Res = erlang:binary_to_list(BinElem),
-  Bin2 = binary:part(_Bin, {_Size, ?SIZE(_Bin) - _Size}),
+  Res     = erlang:binary_to_list(BinElem),
+  Bin2    = binary:part(_Bin, {_Size, ?SIZE(_Bin) - _Size}),
   {Res, Bin2};
 decode_list(?DECODE_LIST) ->
   {Size, Bin1} = decode_integer(_Bin),
-  BinElem = binary:part(Bin1, {0,Size}),
-  Res = decode_list_(BinElem,[],[]),
-  Bin2 = binary:part(Bin1, {Size, ?SIZE(Bin1) - Size}),
+  BinElem      = binary:part(Bin1, {0,Size}),
+  Res          = decode_list_(BinElem,[],[]),
+  Bin2         = binary:part(Bin1, {Size, ?SIZE(Bin1) - Size}),
   {Res, Bin2}.
 
 
@@ -1713,24 +1694,13 @@ decode_list_(<<Bin/binary>>, Res, Flag) ->
 
 
 decode_tuple(<<?Tu_sipInfo, Bin/binary>>) ->
-  {List, Bin1} = decode_list(Bin),
-  {{sipInfo, List}, Bin1};
+  [List, Bin1] = decode([list], Bin),
+  {{sipInfo, List}, Bin1, [sipinfo]};
 decode_tuple(<<?Tu_sdp, Bin/binary>>) ->
-  {Version, Bin1}    = decode_binary(Bin),
-  {Origin, Bin2}     = decode_tuple(Bin1),
-  {Title, Bin3}      = decode_binary(Bin2),
-  {Arg1, Bin4}       = decode_binary(Bin3),
-  {Arg2, Bin5}       = decode_binary(Bin4),
-  {Arg3, Bin6}       = decode_binary(Bin5),
-  {Arg4, Bin7}       = decode_binary(Bin6),
-  {Connection, Bin8} = decode_tuple(Bin7),
-  {List1, Bin9}      = decode_list(Bin8),
-  {Arg5, Bin10}      = decode_binary(Bin9),
-  {List2, Bin11}     = decode_list(Bin10),
-  {Arg6, Bin12}      = decode_binary(Bin11),
-  {Arg7, Bin13}      = decode_binary(Bin12),
-  {List3, Bin14}     = decode_list(Bin13),
-  {List4, Bin15}     = decode_list(Bin14),
+  [Version, Origin, Title, Arg1, Arg2, Arg3, Arg4, Bin1] = decode([binary, tuple, 
+    binary, binary, binary, binary, binary], Bin),
+  [Connection, List1, Arg5, List2, Arg6, Arg7, List3, List4, Bin2] = decode([tuple, 
+    list, binary, list, binary, binary, list, list], Bin1),
   {{sdp,
     Version,
     Origin,
@@ -1746,16 +1716,11 @@ decode_tuple(<<?Tu_sdp, Bin/binary>>) ->
     Arg6,
     Arg7,
     List3,
-    List4}, Bin15};
+    List4}, Bin2, [version, origin, title, arg1, arg2, arg3, arg4, connection, 
+    list1, arg5, list2, arg6, arg7, list3, list4]};
 decode_tuple(<<?Tu_SSNotification, Bin/binary>>) ->
-  {SSFamily, Bin1}         = decode_unknown(Bin),
-  {CGPN, Bin2}             = decode_record(Bin1),
-  {CDPN, Bin3}             = decode_record(Bin2),
-  {ServingSide, Bin4}      = decode_enum(Bin3),
-  {ServiceTimeStamp, Bin5} = decode_time(Bin4),
-  {Participants, Bin6}     = decode_list(Bin5),
-  {Internal, Bin7}         = decode_bool(Bin6),
-  {Args, Bin8}             = decode_tuple(Bin7),
+  [SSFamily, CGPN, CDPN, ServingSide, ServiceTimeStamp, Participants, Internal,
+    Args, Bin1] = decode([unknown, record, record, enum, time, list, bool, tuple], Bin),
   {{'SSNotification',
     SSFamily,
     CGPN,
@@ -1764,39 +1729,27 @@ decode_tuple(<<?Tu_SSNotification, Bin/binary>>) ->
     ServiceTimeStamp,
     Participants,
     Internal,
-    Args}, Bin8};
+    Args}, Bin1, [ssfamily, cgpn, cdpn, servingSide, serviceTimeStamp, participants,
+      internal, args]};
 decode_tuple(<<?Tu_origin, Bin/binary>>) ->
-  {Symbol, Bin1} = decode_binary(Bin),
-  {Num1, Bin2}   = decode_binary(Bin1),
-  {Num2, Bin3}   = decode_binary(Bin2),
-  {Type, Bin4}   = decode_binary(Bin3),
-  {Prot, Bin5}   = decode_binary(Bin4),
-  {Ip, Bin6}     = decode_binary(Bin5),
+  [Symbol, Num1, Num2, Type, Prot, Ip, Bin1] = decode([binary, binary, binary,
+    binary, binary, binary], Bin),
   {{origin,
     Symbol,
     Num1,
     Num2,
     Type,
     Prot,
-    Ip}, Bin6};
+    Ip}, Bin1, [symbol, num1, num2, type, prot, ip]};
 decode_tuple(<<?Tu_connection, Bin/binary>>) ->
-  {Type, Bin1} = decode_binary(Bin),
-  {Prot, Bin2} = decode_binary(Bin1),
-  {Ip, Bin3}   = decode_binary(Bin2),
+  [Type, Prot, Ip, Bin1] = decode([binary, binary, binary], Bin),
   {{connection,
     Type,
     Prot,
-    Ip}, Bin3};
+    Ip}, Bin1, [type, prot, ip]};
 decode_tuple(<<?Tu_SSEntity, Bin/binary>>) ->
-  {Atom1, Bin1}  = decode_binary(Bin),
-  {Atom2, Bin2}  = decode_binary(Bin1),
-  {Number, Bin3} = decode_integer(Bin2),
-  {Bool1, Bin4}  = decode_bool(Bin3),
-  {Bool2, Bin5}  = decode_bool(Bin4),
-  {Arg1, Bin6}   = decode_binary(Bin5),
-  {List1, Bin7}  = decode_list(Bin6),
-  {List2, Bin8}  = decode_list(Bin7),
-  {List3, Bin9}  = decode_list(Bin8),
+  [Atom1, Atom2, Number, Bool1, Bool2, Arg1, List1, List2, List3, Bin1] = decode([binary,
+    binary, integer, bool, bool, binary, list, list, list], Bin),
   {{ss_entity,
     Atom1,
     Atom2,
@@ -1806,80 +1759,61 @@ decode_tuple(<<?Tu_SSEntity, Bin/binary>>) ->
     Arg1,
     List1,
     List2,
-    List3}, Bin9};
+    List3}, Bin1, [atom1, atom2, number, bool1, bool2, arg1, list1, list2, list3]};
 decode_tuple(<<?Tu_media_description, Bin/binary>>) ->
-  {Media, Bin1} = decode_tuple(Bin),
-  {Arg1, Bin2}  = decode_binary(Bin1),
-  {Arg2, Bin3}  = decode_tuple(Bin2),
-  {List1, Bin4} = decode_list(Bin3),
-  {Arg3, Bin5}  = decode_binary(Bin4),
-  {List2, Bin6} = decode_list(Bin5),
+  [Media, Arg1, Arg2, List1, Arg3, List2, Bin1] = decode([tuple, binary, tuple, list, 
+    binary, list], Bin),
   {{media_description,
     Media,
     Arg1,
     Arg2,
     List1,
     Arg3,
-    List2}, Bin6};
+    List2}, Bin1, [media, arg1, arg2, list1, arg3, list2]};
 decode_tuple(<<?Tu_media, Bin/binary>>) ->
-  {Type, Bin1}    = decode_binary(Bin),
-  {Size, Bin2}    = decode_binary(Bin1),
-  {Arg, Bin3}     = decode_binary(Bin2),
-  {Prot, Bin4}    = decode_binary(Bin3),
-  {Formats, Bin5} = decode_list(Bin4),
+  [Type, Size, Arg, Prot, Formats, Bin1] = decode([binary, binary, binary, binary, list], Bin),
   {{media,
     Type,
     Size,
     Arg,
     Prot,
-    Formats}, Bin5};
+    Formats}, Bin1, [type, size, arg, prot, formats]};
 decode_tuple(<<?Tu_attribute, Bin/binary>>) ->
-  {Type, Bin1}    = decode_binary(Bin),
-  {Version, Bin2} = decode_binary(Bin1),
-  {Atom, Bin3}    = decode_binary(Bin2),
+  [Type, Version, Atom, Bin1] = decode([binary, binary, binary], Bin),
   {{attribute,
     Type,
     Version,
-    Atom}, Bin3};
+    Atom}, Bin1, [type, version, atom]};
 decode_tuple(<<?Tu_AdditionalISUP, Bin/binary>>) ->
-  {Msg, Bin1}  = decode_list(Bin),
-  {List, Bin2} = decode_list(Bin1),
+  [Msg, List, Bin1] = decode([list, list], Bin),
   {{'AdditionalISUP',
     Msg,
-    List}, Bin2};
+    List}, Bin1, [msg, list]};
 decode_tuple(<<?Tu_AdditionalISUPParam, Bin/binary>>) ->
-  {Type, Bin1}   = decode_integer(Bin),
-  {Length, Bin2} = decode_integer(Bin1),
-  {Value, Bin3}  = decode_binary(Bin2),
+  [Type, Length, Value, Bin1] = decode([integer, ineteger, binary], Bin),
   {{'AdditionalISUPParam',
     Type,
     Length,
-    Value}, Bin3};
+    Value}, Bin1, [type, length, value]};
 decode_tuple(<<?Tu_AdditionalSIP, Bin/binary>>) ->
-  {Msg, Bin1}    = decode_list(Bin),
-  {Params, Bin2} = decode_list(Bin1),
+  [Msg, Params, Bin1] = decode([list, list], Bin),
   {{'AdditionalSIP',
     Msg,
-    Params}, Bin2};
+    Params}, Bin1, [msg, params]};
 decode_tuple(<<?Tu_AdditionalSIPParam, Bin/binary>>) ->
-  {Type, Bin1}  = decode_list(Bin),
-  {Value, Bin2} = decode_list(Bin1),
+  [Type, Value, Bin1] = decode([list, list], Bin),
   {{'AdditionalSIPParam',
     Type,
-    Value},Bin2};
+    Value}, Bin1, [type, value]};
 decode_tuple(<<?Tu_format, Bin/binary>>) ->
-  {Bit, Bin1}                       = decode_binary(Bin),
-  {Codec, Bin2}                     = decode_binary(Bin1),
-  {Kb, <<Status, _/binary>> = Bin3} = decode_binary(Bin2),
+  [Bit, Codec, Kb, <<Status, _/binary>> = Bin1] = decode([binary, binary, binary], Bin), 
   if
     Status == ?T_List ->
-      {Version, Bin4} = decode_list(Bin3);
+      [Version, Bin2] = decode([list],Bin1);
     true ->
-      {Version, Bin4} = decode_binary(Bin3)
+      [Version, Bin2] = decode([binary],Bin1)
   end,
-  {Info, Bin5} = decode_binary(Bin4),
-  {Arg1, Bin6} = decode_bool(Bin5),
-  {Arg2, Bin7} = decode_bool(Bin6),
+  [Info, Arg1, Arg2, Bin4] = decode([binary, bool, bool], Bin2),
   {{format,
     Bit,
     Codec,
@@ -1887,11 +1821,11 @@ decode_tuple(<<?Tu_format, Bin/binary>>) ->
     Version,
     Info,
     Arg1,
-    Arg2}, Bin7};
+    Arg2}, Bin4, [bit, codec, kb, version, info, arg1, arg2]};
 decode_tuple(<<?Tu_MediaId, Bin/binary>>) ->
-  {ResBin, Bin1} = decode_binary(Bin),
+  [ResBin, Bin1] = decode([binary],Bin),
   {{'MediaId',
-    ResBin}, Bin1};
+    ResBin}, Bin1, [resbin]};
 decode_tuple(<<?Tu_keyvalue, SizeKey, BinKey:SizeKey/binary, Bin/binary>>) ->
   Key           = erlang:binary_to_term(BinKey),
   {Value, Bin1} = decode_value(Bin),
@@ -1948,6 +1882,11 @@ test_([Pack | T]) ->
   Before = ?SIZE(term_to_binary(Pack)),
   Time = erlang:monotonic_time(micro_seconds),
   Binary = encode(Pack),
+  <<Type, _/binary>> = Binary,
+  if 
+    Type == 254 -> io:format("Not optimal!~n~p~n",[Pack]);
+    true -> false
+  end,
   log:trace([acpCoderTrace],"Encode time = ~p~n",[(erlang:monotonic_time(micro_seconds) - Time)]),
   After = ?SIZE(Binary),
   Time1 = erlang:monotonic_time(micro_seconds),

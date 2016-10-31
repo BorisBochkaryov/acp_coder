@@ -10,7 +10,7 @@
 -compile(inline).
 -compile({inline_size, 128}).
 
--export([test/1, encode/1, decode/1]).
+-export([test/1, encode/1, decode/1, decode_list/1]).
 -include_lib("chronica/include/chronica.hrl").
 -include("INCS3datatypes.hrl").
 -include("INCS3Internals.hrl").
@@ -29,7 +29,7 @@
 
 % Simple types
 -define(T_Binary, 1).
--define(T_Integer, 2).
+-define(T_Integer8, 2).
 -define(T_Tuple, 3).
 -define(T_List, 4).
 -define(T_Bool, 5).
@@ -38,7 +38,7 @@
 -define(T_Bool_true, 8).
 -define(T_Bool_false, 9).
 -define(T_Binary_Long, 10).
--define(T_Integer_Long, 11).
+-define(T_Integer24, 11).
 
 % Records
 -define(R_AcpMessage,1).
@@ -146,54 +146,17 @@
 
 -define(ENCODE_BINARY(Bin), <<?T_Binary, (?SIZE(Bin)):8, Bin/binary>>).
 -define(ENCODE_LONG_BINARY(Bin), <<?T_Binary_Long, (?SIZE(Bin)):24, Bin/binary>>).
--define(ENCODE_LONG_INTEGER(Bin, Size),
-  begin
-    Size = ?SIZE(BinInt),
-    if
-      Size =< 16#FFFFFF ->
-        <<?T_Integer_Long, (?SIZE(Bin)):24, Bin/binary>>;
-      true ->
-        erlang:throw({error_encode_long_integer, Bin})
-    end
-  end).
--define(ENCODE_INTEGER(Int),
-  begin
-    BinInt = erlang:term_to_binary(Int, [{compressed,4}]),
-    Size = ?SIZE(BinInt),
-    if
-      Size =< 16#FF ->
-        <<?T_Integer, Size:8, BinInt/binary>>;
-      true ->
-        ?ENCODE_LONG_INTEGER(BinInt, Size)
-    end
-  end).
--define(ENCODE_STRING(Str),
-  begin
-    BinStr = erlang:list_to_binary(Str),
-    <<?T_String, (?SIZE(BinStr)), BinStr/binary>>
-  end).
--define(ENCODE_BOOL(Atom), case Atom of false -> <<?T_Bool_false>>; true -> <<?T_Bool_true>>; undefined -> <<?Undefined>> end).
--define(ENCODE_UNKNOWN(Term),
-  begin
-    BinTerm = erlang:term_to_binary(Term,[{compressed,4}]),
-    <<?UNKNOWN,
-      (?ENCODE_INTEGER(?SIZE(BinTerm)))/binary,
-      BinTerm/binary>>
-  end).
--define(ENCODE_TIME(MegaSec,Sec,MicSec),
-  begin
-    BinMeSec = erlang:integer_to_binary(MegaSec),
-    BinSec = erlang:integer_to_binary(Sec),
-    BinMicSec = erlang:integer_to_binary(MicSec),
-    <<?R_EventTime, (?SIZE(BinMeSec)), BinMeSec/binary, (?SIZE(BinSec)), BinSec/binary,
-      (?SIZE(BinMicSec)), BinMicSec/binary>>
-  end).
-
+% -define(ENCODE_LONG_INTEGER(Bin, Size), encode_long_integer(Bin, Size)).
+-define(ENCODE_INTEGER(Int), encode_integer_any(Int)).
+-define(ENCODE_STRING(Str), encode_string(Str)).
+-define(ENCODE_BOOL(Atom), encode_bool(Atom)).
+-define(ENCODE_UNKNOWN(Term), encode_unknown(Term)).
+-define(ENCODE_TIME(MegaSec,Sec,MicSec), encode_time(MegaSec,Sec,MicSec)).
 
 -define(DECODE_BINARY, <<?T_Binary, Size:8, _Bin:Size/binary, _Rest/binary>>).
 -define(DECODE_LONG_BINARY, <<?T_Binary_Long, Size:24, _Bin:Size/binary, _Rest/binary>>).
--define(DECODE_INTEGER, <<?T_Integer, _Size:8, _Bin/binary>>).
--define(DECODE_LONG_INTEGER, <<?T_Integer_Long, Size:24, _Bin:Size/binary, _Rest/binary>>).
+-define(DECODE_INTEGER, <<?T_Integer8, _Size:8, _Bin/binary>>).
+-define(DECODE_LONG_INTEGER, <<?T_Integer24, Size:24, _Bin:Size/binary, _Rest/binary>>).
 -define(DECODE_STRING, <<?T_String, _Size, _Bin/binary>>).
 -define(DECODE_LIST, <<?T_List, _Bin/binary>>).
 -define(DECODE_UNKNOWN, <<?UNKNOWN, _Bin/binary>>).
@@ -992,6 +955,41 @@ encode_value(Value) ->
   writeToError(["Unknown value in {Key, Value}",Value]),
   ?ENCODE_UNKNOWN(Value).
 
+encode_integer_any(Int) ->
+  BinInt = erlang:term_to_binary(Int, [{compressed,4}]),
+  Size = ?SIZE(BinInt),
+  if
+    Size =< 16#FF ->
+      <<?T_Integer8, Size:8, BinInt/binary>>;
+    Size =< 16#FFFFFF ->
+      <<?T_Integer24, Size:24, BinInt/binary>>;
+    true ->
+      erlang:throw({error_encode_long_integer, Int})
+  end.
+
+encode_string(Str) ->
+  BinStr = erlang:list_to_binary(Str),
+  <<?T_String, (?SIZE(BinStr)), BinStr/binary>>.
+
+encode_bool(Atom) ->
+  case Atom of
+    false -> <<?T_Bool_false>>;
+    true -> <<?T_Bool_true>>;
+    undefined -> <<?Undefined>>
+  end.
+
+encode_unknown(Term) ->
+  BinTerm = erlang:term_to_binary(Term,[{compressed,4}]),
+  <<?UNKNOWN,
+    (?ENCODE_INTEGER(?SIZE(BinTerm)))/binary,
+    BinTerm/binary>>.
+
+encode_time(MegaSec,Sec,MicSec) ->
+  BinMeSec = erlang:integer_to_binary(MegaSec),
+  BinSec = erlang:integer_to_binary(Sec),
+  BinMicSec = erlang:integer_to_binary(MicSec),
+  <<?R_EventTime, (?SIZE(BinMeSec)), BinMeSec/binary, (?SIZE(BinSec)), BinSec/binary,
+  (?SIZE(BinMicSec)), BinMicSec/binary>>.
 
 %%%%%% Decode
 -define(WIRESHARK, 0). % 1 - включено, 0 - выключено
@@ -1024,8 +1022,8 @@ decode(Pack) ->
               erlang:throw({decode_error, Pack})
             end
         catch
-          _:_ ->
-            log:error("decode error for ~p",[Pack])
+          _:Error ->
+            log:error("decode error for ~p: ~p",[Pack,Error])
         end
   end.
 
@@ -1065,7 +1063,8 @@ decodeFromList([], Bin) -> [Bin].
 decode_record(?DECODE_UNDEFINED) -> {undefined, _Bin, []};
 decode_record(<<?UNKNOWN, _/binary>> = Term) -> decode_unknown(Term);
 decode_record(<<?R_AcpMessage, ?T_String, Bin/binary>>) ->
-  [Commit, Uri, CallRef, Body, Bin1] = decodeFromList([list, binary, integer, record], Bin),
+  _Bin = <<?T_String, Bin/binary>>,
+  [Commit, Uri, CallRef, Body, Bin1] = decodeFromList([list, binary, integer, record], _Bin),
   case ?WIRESHARK of
     1 -> {record_info(fields, 'AcpMessage'),
            #'AcpMessage'{
@@ -1983,4 +1982,4 @@ writeToLogs(TimeStart, Packet, Result, Status) ->
 
 
 writeToError(Packet) ->
-  log:trace([acpCoderError],"~nError packet:~p~n~n",[Packet]).
+  log:warning([acpCoderError],"~nError packet:~p~n~n",[Packet]).

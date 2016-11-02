@@ -987,7 +987,7 @@ decode(Pack) ->
       0 ->
         log:debug("decode args: ~p", [Pack]),
         TimeStart = erlang:monotonic_time(micro_seconds),
-        case decode_record(Pack) of
+        try decode_record(Pack) of
           Packet ->
             case Packet of
               {Result, Commit, _Bin} ->
@@ -996,9 +996,9 @@ decode(Pack) ->
             _ ->
               erlang:throw({decode_error, Pack})
             end
-        % catch
-        %   _:Error ->
-        %     log:error("decode error for ~p: ~p",[Pack,Error])
+        catch
+          _:Error ->
+            log:error("decode error for ~p: ~p",[Pack,Error])
         end
   end.
 

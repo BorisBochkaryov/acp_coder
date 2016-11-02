@@ -25,7 +25,6 @@
           facility                :: undefined | 'FacilityType'(),
           callId                  :: undefined | 'CallId'(),
           sdp                     :: undefined | 'SDPType'(),
-          mediaPoint              :: undefined | 'MediaPointType'(),
           trunkGroupId            :: undefined | 'TrunkGroupId'(),
           callTransferNumber      :: undefined | 'CallTransferNumber'(),
           refer                   :: undefined | 'ReferType'(),
@@ -83,7 +82,6 @@
           redirectionRestInd :: undefined | 'RedirectionRestrictionIndicator'(),
           callId                     :: undefined | 'CallId'(),
           sdp             :: 'SDPType'(),
-          obsoleteMediaPoint      :: undefined | 'MediaPointType'(),
           refer           :: undefined | 'ReferType'(),
           eventTime       :: 'EventTime'()
         }).

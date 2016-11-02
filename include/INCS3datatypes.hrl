@@ -551,9 +551,9 @@
 %%% operator specific.
 -record('CallerDisplayInformation',
         {
-          showDisplayName = false     :: boolean(),
+          showDisplayName = true     :: boolean(),
           displayName                 :: undefined | string(),
-          showCallerId = false        :: boolean(),
+          showCallerId = true        :: boolean(),
           callerId                    :: undefined | 'Digits'()
         }).
 -type 'CallerDisplayInformation'() :: #'CallerDisplayInformation'{}.
@@ -1581,9 +1581,9 @@
 
 -record('RedirectionInformation',
         {
-          originalRedirectionReason :: undefined | 'OriginalRedirectionReason',
-          redirectingIndicator :: undefined | 'RedirectingIndicator' | diversion,
-          redirectingReason :: undefined | 'RedirectingReason',
+          originalRedirectionReason :: undefined | 'OriginalRedirectionReason'(),
+          redirectingIndicator :: undefined | 'RedirectingIndicator'(),
+          redirectingReason :: undefined | 'RedirectingReason'(),
           redirectionCounter :: undefined | 0 | 1 | 2 | 3 | 4 | 5
         }).
 -type 'RedirectionInformation'() :: #'RedirectionInformation'{}.

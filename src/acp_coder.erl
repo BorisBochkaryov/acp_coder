@@ -982,7 +982,7 @@ decode(Pack) ->
             end
         catch
           _:_ ->
-            log:error("decode error for ~p",[Pack])
+            io_lib:format("decode error for ~p",[Pack])
         end;
       0 ->
         log:debug("decode args: ~p", [Pack]),
